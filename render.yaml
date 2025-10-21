@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: estoque-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SPREADSHEET_ID
+        value: 1O0g1CoxVvZWfOVPO2lECdj2RjrcZCXUJbZyoeFmsQiw
+      - key: SERVICE_ACCOUNT_EMAIL
+        fromService:
+          type: env
+          property: SERVICE_ACCOUNT_EMAIL
+      - key: SERVICE_ACCOUNT_KEY
+        fromService:
+          type: env
+          property: SERVICE_ACCOUNT_KEY
