@@ -1,6 +1,6 @@
 // ==================== CONFIGURAÇÕES ====================
 const CONFIG = {
-    API_BASE_URL: 'https://estoque-backend-zfgj.onrender.com/', // Substitua pela URL do seu serviço no Render
+    API_BASE_URL: 'https://estoque-backend-zfgj.onrender.com', // Substitua pela URL do seu serviço no Render
     ITEMS_PER_PAGE: 12,
     EXPIRING_DAYS_WARNING: 30,
     EXPIRING_DAYS_CRITICAL: 7
