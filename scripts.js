@@ -1,912 +1,456 @@
-// ==================== CONFIGURAÇÕES ====================
-const CONFIG = {
-    API_BASE_URL: 'https://estoque-backend-zfgj.onrender.com', // Substitua pela URL do seu serviço no Render
-    ITEMS_PER_PAGE: 12,
-    EXPIRING_DAYS_WARNING: 30,
-    EXPIRING_DAYS_CRITICAL: 7
-};
+const config = { apiUrl: 'https://estoque-backend-zfgj.onrender.com/api' };
 
-// ==================== ESTADO GLOBAL ====================
 const state = {
+    products: [],
+    filteredProducts: [],
+    locationsCache: [],
+    globalMinStockCache: [],
     currentPage: 1,
-    stockData: [],
-    locationsData: [],
-    filteredStockData: [],
-    searchQuery: '',
-    statusFilter: ''
+    itemsPerPage: 10
 };
 
-// ==================== INICIALIZAÇÃO ====================
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('[App] Iniciando aplicação');
-    showLoading();
+async function loadGlobalMinStock() {
     try {
-        initializeEventListeners();
-        await loadAllData();
+        const response = await fetch(`${config.apiUrl}/globalMinStock`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        state.globalMinStockCache = (await response.json()).data;
     } catch (error) {
-        console.error('[App] Erro na inicialização:', error);
-        alert(`Erro ao iniciar aplicação: ${error.message}. Por favor, recarregue a página.`);
-    } finally {
-        hideLoading();
-    }
-});
-
-// ==================== CARREGAR DADOS ====================
-async function loadAllData() {
-    showLoading();
-    try {
-        console.log('[Data] Carregando todos os dados do backend');
-        await Promise.all([
-            loadStock(),
-            loadLocations(),
-            loadLogs()
-        ]);
-        
-        applyFilters();
-        displayStock();
-        displayLocations();
-        displayLogs();
-        checkExpiringProducts();
-    } catch (error) {
-        console.error('[Data] Erro ao carregar dados:', error);
-        alert(`Erro ao carregar dados: ${error.message}. Verifique sua conexão ou contate o suporte.`);
-    } finally {
-        hideLoading();
+        console.error('Erro ao carregar estoque mínimo global:', error);
     }
 }
 
-async function loadStock() {
+function checkGlobalStock(productName, newQuantity = 0) {
+    const products = state.products.filter(p => 
+        p.productName.toLowerCase() === productName.toLowerCase()
+    );
+
+    if (products.length === 0) return null;
+
+    const totalStock = products.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0) + newQuantity;
+    const globalMinStockEntry = state.globalMinStockCache.find(g => 
+        g.productName.toLowerCase() === productName.toLowerCase()
+    );
+    const globalMinStock = globalMinStockEntry ? globalMinStockEntry.minStock : 0;
+
+    return {
+        totalStock,
+        globalMinStock,
+        isLow: totalStock <= globalMinStock
+    };
+}
+
+function formatDate(dateStr) {
+    if (!dateStr || dateStr === 'N/A') return 'N/A';
     try {
-        console.log('[API Request] URL:', `${CONFIG.API_BASE_URL}/api/stock`);
-        const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock`, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
+        if (typeof dateStr === 'string' && dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+            return dateStr;
+        }
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return 'Data inválida';
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+    } catch (error) {
+        console.error('Erro ao formatar data:', error);
+        return 'Data inválida';
+    }
+}
+
+async function updateLocationSelect(selectId = 'locationId') {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    select.innerHTML = '<option value="">Selecione a localização...</option>';
+    try {
+        const response = await fetch(`${config.apiUrl}/locations`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        state.locationsCache = (await response.json()).data;
+        state.locationsCache.forEach(location => {
+            const option = document.createElement('option');
+            option.value = location.id;
+            option.textContent = location.cabinet ? `${location.room} - ${location.cabinet}` : location.room;
+            select.appendChild(option);
         });
-        console.log('[API Response] Status:', response.status, 'OK:', response.ok);
-        if (!response.ok) throw new Error(`Erro ao carregar estoque: ${response.status} ${response.statusText}`);
-        let result = await response.json();
-        if (!result || typeof result !== 'object' || !result.success) throw new Error('Resposta inválida');
-        state.stockData = Array.isArray(result.data) ? result.data : [];
-        console.log('[Data] Estoque carregado:', state.stockData.length, 'itens');
     } catch (error) {
-        console.error('[Fetch Error Details]', error);
-        throw error;
+        console.error('Erro ao carregar localizações:', error);
     }
 }
 
-async function loadLocations() {
+async function loadAndDisplayStock() {
+    showLoading();
     try {
-        console.log('[API Request] Carregando localidades do backend');
-        const response = await fetch(`${CONFIG.API_BASE_URL}/api/locations`);
-        
-        if (!response.ok) {
-            throw new Error(`Erro ao carregar localidades: ${response.status} ${response.statusText}`);
-        }
-        
-        let result;
-        try {
-            result = await response.json();
-        } catch (error) {
-            throw new Error('Erro ao parsear resposta do servidor: JSON inválido');
-        }
-        
-        if (!result || typeof result !== 'object' || !result.success) {
-            throw new Error('Resposta do servidor em formato inválido');
-        }
-        
-        state.locationsData = Array.isArray(result.data) ? result.data : [];
-        console.log('[Data] Localidades carregadas:', state.locationsData.length, 'itens');
-        populateLocationDropdown();
+        const response = await fetch(`${config.apiUrl}/stock`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        state.products = (await response.json()).data;
+        state.filteredProducts = [...state.products];
+        await loadGlobalMinStock();
+        renderProductTable();
     } catch (error) {
-        console.error('[Data] Erro ao carregar localidades:', error);
-        throw error;
+        showError('form-error', `Falha ao carregar estoque: ${error.message}`);
+        state.products = [];
+        state.filteredProducts = [];
+        renderProductTable();
+    } finally {
+        hideLoading();
     }
 }
 
-async function loadLogs() {
-    try {
-        console.log('[API Request] Carregando logs do backend');
-        const response = await fetch(`${CONFIG.API_BASE_URL}/api/logs`);
-        
-        if (!response.ok) {
-            throw new Error(`Erro ao carregar logs: ${response.status} ${response.statusText}`);
-        }
-        
-        let result;
-        try {
-            result = await response.json();
-        } catch (error) {
-            throw new Error('Erro ao parsear resposta do servidor: JSON inválido');
-        }
-        
-        if (!result || typeof result !== 'object' || !result.success) {
-            throw new Error('Resposta do servidor em formato inválido');
-        }
-        
-        console.log('[Data] Logs carregados:', result.data.length, 'itens');
-        return Array.isArray(result.data) ? result.data : [];
-    } catch (error) {
-        console.error('[Data] Erro ao carregar logs:', error);
-        return [];
+function createProductRow(product, index) {
+    const statusClass = product.status.replace(/\s+/g, '-').toLowerCase();
+    const row = document.createElement('tr');
+    row.className = `status-${statusClass}`;
+    row.setAttribute('data-id', product.id);
+
+    const alerts = [];
+    if (product.status === 'esgotado') alerts.push('Esgotado');
+    if (product.expirationDate && new Date(product.expirationDate) < new Date()) {
+        alerts.push('Vencido');
     }
+
+    row.innerHTML = `
+        <td data-label="Produto">${product.productName}</td>
+        <td data-label="Unidade">${product.unit}</td>
+        <td data-label="Quantidade">${product.quantity.toFixed(2)}</td>
+        <td data-label="Lote">${product.batch}</td>
+        <td data-label="Embalagem">${product.packageType}</td>
+        <td data-label="Validade">${formatDate(product.expirationDate)}</td>
+        <td data-label="Localização">${product.location}</td>
+        <td data-label="Alerta">${alerts.join(' • ')}</td>
+        <td data-label="Ações" class="product-actions">
+            <input type="number" id="quantity-use-${product.id}" class="quantity-input" min="0" step="0.01" placeholder="Qtd" aria-label="Quantidade a usar">
+            <button class="btn-action use" onclick="useProduct('${product.id}', ${index})" ${product.status === 'esgotado' ? 'disabled' : ''} title="Usar"><i class="fas fa-hand-paper"></i></button>
+            <button class="btn-action finish" onclick="finishProduct('${product.id}', ${index})" ${product.status === 'esgotado' ? 'disabled' : ''} title="Esgotar"><i class="fas fa-check-circle"></i></button>
+            <button class="btn-action edit" onclick="editProduct('${product.id}', ${index})" title="Editar"><i class="fas fa-edit"></i></button>
+            <button class="btn-action delete" onclick="deleteProduct('${product.id}', ${index})" title="Excluir"><i class="fas fa-trash"></i></button>
+        </td>
+    `;
+    return row;
 }
 
-// ==================== FILTROS E BUSCA ====================
-function applyFilters() {
-    let filtered = [...state.stockData];
-    
-    if (state.searchQuery) {
-        const query = state.searchQuery.toLowerCase();
-        filtered = filtered.filter(item => 
-            (item.product && item.product.toLowerCase().includes(query)) ||
-            (item.batch && item.batch.toLowerCase().includes(query)) ||
-            (item.manufacturer && item.manufacturer.toLowerCase().includes(query))
-        );
-    }
-    
-    if (state.statusFilter) {
-        filtered = filtered.filter(item => item.status === state.statusFilter);
-    }
-    
-    state.filteredStockData = filtered;
-    state.currentPage = 1;
-}
+function renderProductTable() {
+    const tableBody = document.getElementById('productTableBody');
+    if (!tableBody) return;
 
-function groupByProductAndBatch(data) {
-    const grouped = {};
-    
-    data.forEach(item => {
-        if (!item.product || !item.batch) {
-            console.warn('[Data] Item com product ou batch inválido:', item);
-            return;
-        }
-        
-        const key = `${item.product}_${item.batch}`;
-        
-        if (!grouped[key]) {
-            grouped[key] = {
-                ...item,
-                totalQuantity: 0,
-                items: []
+    tableBody.innerHTML = '';
+
+    if (state.filteredProducts.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="9">Nenhum produto encontrado.</td></tr>';
+        return;
+    }
+
+    // Agrupar por productName e batch
+    const groupedProducts = state.filteredProducts.reduce((acc, product, index) => {
+        const key = `${product.productName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}_${product.batch}`;
+        if (!acc[key]) {
+            acc[key] = {
+                products: [],
+                totalStock: 0,
+                minStock: Infinity,
+                unit: product.unit || 'un',
+                index: index
             };
         }
-        
-        grouped[key].totalQuantity += item.quantity || 0;
-        grouped[key].items.push(item);
-        
-        if (!grouped[key].expirationDate || 
-            (item.expirationDate && item.expirationDate < grouped[key].expirationDate)) {
-            grouped[key].expirationDate = item.expirationDate;
-        }
-    });
-    
-    return Object.values(grouped);
-}
+        acc[key].products.push({ ...product, index });
+        acc[key].totalStock += parseFloat(product.quantity) || 0;
+        acc[key].minStock = Math.min(acc[key].minStock, parseFloat(product.minStock) || 0);
+        return acc;
+    }, {});
 
-function sortByExpirationDate(data) {
-    return data.sort((a, b) => {
-        if (!a.expirationDate) return 1;
-        if (!b.expirationDate) return -1;
-        
-        const dateA = new Date(a.expirationDate);
-        const dateB = new Date(b.expirationDate);
-        
-        return dateA - dateB;
+    const sortedGroups = Object.entries(groupedProducts).sort(([keyA], [keyB]) => {
+        const [nameA, batchA] = keyA.split('_');
+        const [nameB, batchB] = keyB.split('_');
+        return nameA.localeCompare(nameB) || batchA.localeCompare(batchB);
     });
-}
 
-// ==================== EXIBIÇÃO DE DADOS ====================
-function displayStock() {
-    const stockList = document.getElementById('stockList');
-    if (!stockList) {
-        console.error('[UI] Elemento stockList não encontrado no DOM');
-        alert('Erro na interface: elemento de estoque não encontrado. Contate o suporte.');
-        return;
-    }
-    
-    const grouped = groupByProductAndBatch(state.filteredStockData);
-    const sorted = sortByExpirationDate(grouped);
-    
-    const start = (state.currentPage - 1) * CONFIG.ITEMS_PER_PAGE;
-    const end = start + CONFIG.ITEMS_PER_PAGE;
-    const paginated = sorted.slice(start, end);
-    
-    if (paginated.length === 0) {
-        stockList.innerHTML = `
-            <div class="empty-state">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                </svg>
-                <h3>Nenhum produto encontrado</h3>
-                <p>Adicione produtos ao estoque ou ajuste os filtros de busca.</p>
-            </div>
+    for (const [key, groupData] of sortedGroups) {
+        const [productName] = key.split('_');
+        const stockCheck = checkGlobalStock(productName);
+        const globalStockAlert = stockCheck && stockCheck.isLow
+            ? `<span class="alert-global">ESTOQUE BAIXO (Total: ${stockCheck.totalStock.toFixed(2)} | Mínimo: ${stockCheck.globalMinStock.toFixed(2)})</span>`
+            : '';
+
+        const headerRow = document.createElement('tr');
+        headerRow.classList.add('product-group-header');
+        headerRow.innerHTML = `
+            <td colspan="9">
+                <strong>${groupData.products[0].productName} (Lote: ${groupData.products[0].batch})</strong>
+                <div class="group-summary">
+                    Total: ${groupData.totalStock.toFixed(2)} ${groupData.unit} | 
+                    Mínimo: ${groupData.minStock.toFixed(2)} ${groupData.unit}
+                    ${globalStockAlert}
+                </div>
+            </td>
         `;
-    } else {
-        stockList.innerHTML = paginated.map(group => createProductCard(group)).join('');
-    }
-    
-    updatePagination(sorted.length);
-}
+        tableBody.appendChild(headerRow);
 
-function createProductCard(group) {
-    const expiryStatus = getExpiryStatus(group.expirationDate);
-    const expiryBadge = getExpiryBadge(group.expirationDate);
-    const isLowStock = group.totalQuantity <= group.minimumStock && group.minimumStock > 0;
-    
-    return `
-        <div class="product-card ${expiryStatus.class} ${isLowStock ? 'low-stock' : ''}">
-            <div class="product-header">
-                <div>
-                    <div class="product-name">${escapeHtml(group.product)}</div>
-                    <div class="product-batch">Lote: ${escapeHtml(group.batch)}</div>
-                </div>
-                <span class="product-status ${group.status}">${group.status === 'disponivel' ? 'Disponível' : 'Indisponível'}</span>
-            </div>
-            
-            <div class="product-info">
-                <div class="info-row">
-                    <span class="info-label">Quantidade Total</span>
-                    <span class="quantity-badge">${formatNumber(group.totalQuantity)} ${escapeHtml(group.unit)}</span>
-                </div>
-                
-                ${group.manufacturer ? `
-                <div class="info-row">
-                    <span class="info-label">Fabricante</span>
-                    <span class="info-value">${escapeHtml(group.manufacturer)}</span>
-                </div>
-                ` : ''}
-                
-                <div class="info-row">
-                    <span class="info-label">Validade</span>
-                    ${expiryBadge}
-                </div>
-                
-                <div class="info-row">
-                    <span class="info-label">Localização</span>
-                    <span class="info-value">${escapeHtml(group.location || 'Não definida')}</span>
-                </div>
-                
-                ${group.packaging ? `
-                <div class="info-row">
-                    <span class="info-label">Embalagem</span>
-                    <span class="info-value">${escapeHtml(group.packaging)} (${group.packagingNumber}x)</span>
-                </div>
-                ` : ''}
-                
-                ${isLowStock ? `
-                <div class="info-row">
-                    <span class="info-label" style="color: var(--info);">⚠️ Estoque Baixo</span>
-                    <span class="info-value" style="color: var(--info);">Mín: ${formatNumber(group.minimumStock)} ${escapeHtml(group.unit)}</span>
-                </div>
-                ` : ''}
-            </div>
-            
-            <div class="product-actions">
-                <button class="btn-action edit" onclick="editProduct('${group.items[0].id}')" aria-label="Editar produto ${escapeHtml(group.product)}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
-                    Editar
-                </button>
-                <button class="btn-action delete" onclick="deleteProduct('${group.items[0].id}')" aria-label="Excluir produto ${escapeHtml(group.product)}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                    Excluir
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-function getExpiryStatus(expirationDate) {
-    if (!expirationDate || isNaN(new Date(expirationDate))) {
-        return { class: '', status: 'normal' };
-    }
-    
-    const today = new Date();
-    const expiry = new Date(expirationDate);
-    const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-    
-    if (daysUntilExpiry < 0) {
-        return { class: 'expired', status: 'expired' };
-    } else if (daysUntilExpiry <= CONFIG.EXPIRING_DAYS_CRITICAL) {
-        return { class: 'expiring-soon', status: 'critical' };
-    } else if (daysUntilExpiry <= CONFIG.EXPIRING_DAYS_WARNING) {
-        return { class: 'expiring-soon', status: 'warning' };
-    }
-    
-    return { class: '', status: 'normal' };
-}
-
-function getExpiryBadge(expirationDate) {
-    if (!expirationDate || isNaN(new Date(expirationDate))) {
-        return '<span class="expiry-badge normal">Sem validade</span>';
-    }
-    
-    const today = new Date();
-    const expiry = new Date(expirationDate);
-    const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-    const formattedDate = formatDate(expirationDate);
-    
-    if (daysUntilExpiry < 0) {
-        return `<span class="expiry-badge danger">Vencido (${formattedDate})</span>`;
-    } else if (daysUntilExpiry <= CONFIG.EXPIRING_DAYS_CRITICAL) {
-        return `<span class="expiry-badge danger">${daysUntilExpiry} dias (${formattedDate})</span>`;
-    } else if (daysUntilExpiry <= CONFIG.EXPIRING_DAYS_WARNING) {
-        return `<span class="expiry-badge warning">${daysUntilExpiry} dias (${formattedDate})</span>`;
-    }
-    
-    return `<span class="expiry-badge normal">${formattedDate}</span>`;
-}
-
-function checkExpiringProducts() {
-    const alert = document.getElementById('expiringAlert');
-    const message = document.getElementById('expiringMessage');
-    
-    if (!alert || !message) {
-        console.error('[UI] Elementos expiringAlert ou expiringMessage não encontrados');
-        return;
-    }
-    
-    const today = new Date();
-    const expiring = state.stockData.filter(item => {
-        if (!item.expirationDate || isNaN(new Date(item.expirationDate))) return false;
-        const expiry = new Date(item.expirationDate);
-        const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-        return daysUntilExpiry >= 0 && daysUntilExpiry <= CONFIG.EXPIRING_DAYS_WARNING;
-    });
-    
-    if (expiring.length > 0) {
-        expiring.sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
-        
-        const nearestExpiring = expiring[0];
-        const daysUntilExpiry = Math.ceil((new Date(nearestExpiring.expirationDate) - today) / (1000 * 60 * 60 * 24));
-        
-        message.innerHTML = `
-            ${expiring.length} produto(s) próximo(s) ao vencimento. 
-            <strong>${escapeHtml(nearestExpiring.product)}</strong> vence em ${daysUntilExpiry} dia(s).
-        `;
-        alert.style.display = 'flex';
-    } else {
-        alert.style.display = 'none';
+        groupData.products.forEach(product => {
+            tableBody.appendChild(createProductRow(product, product.index));
+        });
     }
 }
 
-function displayLocations() {
-    const locationsList = document.getElementById('locationsList');
-    if (!locationsList) {
-        console.error('[UI] Elemento locationsList não encontrado no DOM');
-        alert('Erro na interface: elemento de localidades não encontrado. Contate o suporte.');
-        return;
-    }
-    
-    if (state.locationsData.length === 0) {
-        locationsList.innerHTML = `
-            <div class="empty-state">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                    <circle cx="12" cy="10" r="3"></circle>
-                </svg>
-                <h3>Nenhuma localidade cadastrada</h3>
-                <p>Adicione localidades para organizar seu estoque.</p>
-            </div>
-        `;
-        return;
-    }
-    
-    locationsList.innerHTML = state.locationsData.map(loc => `
-        <div class="location-card">
-            <div class="location-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                    <circle cx="12" cy="10" r="3"></circle>
-                </svg>
-            </div>
-            <div class="location-name">${escapeHtml(loc.room)}</div>
-            <div class="location-details">${escapeHtml(loc.cabinet || 'Sem armário especificado')}</div>
-            <div class="location-actions">
-                <button class="btn-action edit" onclick="editLocation('${loc.id}')" aria-label="Editar localidade ${escapeHtml(loc.room)}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
-                    Editar
-                </button>
-                <button class="btn-action delete" onclick="deleteLocation('${loc.id}')" aria-label="Excluir localidade ${escapeHtml(loc.room)}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                    Excluir
-                </button>
-            </div>
-        </div>
-    `).join('');
-}
-
-async function displayLogs() {
-    const logsList = document.getElementById('logsList');
-    if (!logsList) {
-        console.error('[UI] Elemento logsList não encontrado no DOM');
-        alert('Erro na interface: elemento de logs não encontrado. Contate o suporte.');
-        return;
-    }
-    
-    const logs = await loadLogs();
-    
-    if (logs.length === 0) {
-        logsList.innerHTML = `
-            <div class="empty-state">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                </svg>
-                <h3>Nenhum histórico disponível</h3>
-                <p>As ações realizadas aparecerão aqui.</p>
-            </div>
-        `;
-        return;
-    }
-    
-    logsList.innerHTML = logs.slice(0, 50).map(log => `
-        <div class="log-item">
-            <div class="log-header">
-                <span class="log-action">${escapeHtml(log.action)}</span>
-                <span class="log-timestamp">${formatDateTime(log.timestamp)}</span>
-            </div>
-            <div class="log-details">${escapeHtml(log.details)}</div>
-        </div>
-    `).join('');
-}
-
-function updatePagination(totalItems) {
-    const pageInfo = document.getElementById('pageInfo');
-    const prevBtn = document.getElementById('prevPage');
-    const nextBtn = document.getElementById('nextPage');
-    
-    if (!pageInfo || !prevBtn || !nextBtn) {
-        console.error('[UI] Elementos de paginação não encontrados');
-        return;
-    }
-    
-    const totalPages = Math.ceil(totalItems / CONFIG.ITEMS_PER_PAGE) || 1;
-    
-    pageInfo.textContent = `Página ${state.currentPage} de ${totalPages}`;
-    prevBtn.disabled = state.currentPage === 1;
-    nextBtn.disabled = state.currentPage === totalPages;
-}
-
-// ==================== NAVEGAÇÃO ====================
-function showTab(tabName) {
-    document.querySelectorAll('.tab-content').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    
-    const selectedTab = document.getElementById(`${tabName}-section`);
-    if (selectedTab) {
-        selectedTab.classList.add('active');
-    } else {
-        console.error(`[UI] Tab ${tabName}-section não encontrada`);
-    }
-    
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    
-    const selectedNav = document.getElementById(`${tabName}TabBtn`);
-    if (selectedNav) {
-        selectedNav.classList.add('active');
-    }
-    
-    if (tabName === 'logs') {
-        displayLogs();
-    }
-}
-
-function previousPage() {
-    if (state.currentPage > 1) {
-        state.currentPage--;
-        displayStock();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-}
-
-function nextPage() {
-    const totalPages = Math.ceil(state.filteredStockData.length / CONFIG.ITEMS_PER_PAGE);
-    if (state.currentPage < totalPages) {
-        state.currentPage++;
-        displayStock();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-}
-
-// ==================== MODAIS ====================
-function openProductModal(title = 'Adicionar Produto', product = null) {
-    const modal = document.getElementById('productModal');
+async function openAddProductModal() {
     const modalTitle = document.getElementById('modalTitle');
-    const form = document.getElementById('productForm');
-    
-    if (!modal || !modalTitle || !form) {
-        console.error('[UI] Elementos do modal de produto não encontrados');
-        alert('Erro na interface: modal de produto não encontrado. Contate o suporte.');
-        return;
-    }
-    
-    modalTitle.textContent = title;
-    
-    if (product) {
-        document.getElementById('productId').value = product.id;
-        document.getElementById('productName').value = product.product;
-        document.getElementById('manufacturer').value = product.manufacturer;
-        document.getElementById('batch').value = product.batch;
-        document.getElementById('quantity').value = product.quantity;
-        document.getElementById('unit').value = product.unit;
-        document.getElementById('packaging').value = product.packaging;
-        document.getElementById('packagingNumber').value = product.packagingNumber;
-        document.getElementById('minimumStock').value = product.minimumStock;
-        document.getElementById('invoice').value = product.invoice;
-        document.getElementById('expirationDate').value = product.expirationDate;
-        document.getElementById('location').value = product.location;
-        document.getElementById('status').value = product.status;
-    } else {
-        form.reset();
-        document.getElementById('productId').value = '';
-        document.getElementById('packagingNumber').value = '1';
-        document.getElementById('minimumStock').value = '0';
-        document.getElementById('status').value = 'disponivel';
-    }
-    
-    populateLocationDropdown();
-    modal.classList.add('active');
+    const addProductForm = document.getElementById('addProductForm');
+    const productIdInput = document.getElementById('productId');
+    const rowIndexInput = document.getElementById('rowIndex');
+    const modalError = document.getElementById('modal-error');
+    const productModal = document.getElementById('productModal');
+    const globalMinStockDisplay = document.getElementById('global-min-stock-display');
+
+    if (modalTitle) modalTitle.textContent = 'Adicionar Produto';
+    if (addProductForm) addProductForm.reset();
+    if (productIdInput) productIdInput.value = '';
+    if (rowIndexInput) rowIndexInput.value = '';
+    if (modalError) modalError.style.display = 'none';
+    if (globalMinStockDisplay) globalMinStockDisplay.textContent = '0.00';
+
+    await updateLocationSelect();
+    if (productModal) productModal.style.display = 'block';
 }
 
-function closeProductModal() {
-    const modal = document.getElementById('productModal');
-    if (modal) {
-        modal.classList.remove('active');
-    }
-}
-
-function openLocationModal(title = 'Adicionar Localidade', location = null) {
-    const modal = document.getElementById('locationModal');
-    const modalTitle = document.getElementById('locationModalTitle');
-    const form = document.getElementById('locationForm');
-    
-    if (!modal || !modalTitle || !form) {
-        console.error('[UI] Elementos do modal de localidade não encontrados');
-        alert('Erro na interface: modal de localidade não encontrado. Contate o suporte.');
-        return;
-    }
-    
-    modalTitle.textContent = title;
-    
-    if (location) {
-        document.getElementById('locationId').value = location.id;
-        document.getElementById('room').value = location.room;
-        document.getElementById('cabinet').value = location.cabinet;
-    } else {
-        form.reset();
-        document.getElementById('locationId').value = '';
-    }
-    
-    modal.classList.add('active');
-}
-
-function closeLocationModal() {
-    const modal = document.getElementById('locationModal');
-    if (modal) {
-        modal.classList.remove('active');
-    }
-}
-
-function populateLocationDropdown() {
-    const select = document.getElementById('location');
-    if (!select) {
-        console.error('[UI] Elemento location não encontrado');
-        return;
-    }
-    
-    select.innerHTML = '<option value="">Selecione uma localização</option>' +
-        state.locationsData.map(loc => 
-            `<option value="${escapeHtml(loc.room)} - ${escapeHtml(loc.cabinet || 'Sem armário')}">${escapeHtml(loc.room)} - ${escapeHtml(loc.cabinet || 'Sem armário')}</option>`
-        ).join('');
-}
-
-// ==================== CRUD PRODUTOS ====================
-async function saveProduct(event) {
+async function addOrUpdateProduct(event) {
     event.preventDefault();
-    showLoading();
-    
-    try {
-        const productId = document.getElementById('productId').value;
-        const isEdit = !!productId;
-        
-        const product = {
-            id: productId || `prod_${Date.now()}`,
-            product: document.getElementById('productName').value.trim(),
-            manufacturer: document.getElementById('manufacturer').value.trim(),
-            batch: document.getElementById('batch').value.trim(),
-            quantity: parseFloat(document.getElementById('quantity').value) || 0,
-            unit: document.getElementById('unit').value,
-            packaging: document.getElementById('packaging').value.trim(),
-            packagingNumber: parseInt(document.getElementById('packagingNumber').value) || 1,
-            minimumStock: parseFloat(document.getElementById('minimumStock').value) || 0,
-            invoice: document.getElementById('invoice').value.trim(),
-            expirationDate: document.getElementById('expirationDate').value,
-            location: document.getElementById('location').value,
-            status: document.getElementById('status').value
-        };
-        
-        if (!product.product || !product.batch || !product.quantity || !product.unit || !product.location || !product.status) {
-            alert('Por favor, preencha todos os campos obrigatórios: Nome, Lote, Quantidade, Unidade, Localização e Status.');
+    const form = document.getElementById('addProductForm');
+    if (!form || !form.checkValidity()) {
+        showError('modal-error', 'Por favor, preencha todos os campos obrigatórios corretamente.');
+        return;
+    }
+
+    const productData = {
+        id: document.getElementById('productId').value || `prod_${Date.now()}`,
+        productName: document.getElementById('productName').value.trim(),
+        manufacturer: document.getElementById('manufacturer').value.trim(),
+        batch: document.getElementById('batch').value.trim(),
+        quantity: parseFloat(document.getElementById('quantity').value) || 0,
+        unit: document.getElementById('unit').value,
+        packageType: document.getElementById('packageType').value,
+        totalPackages: parseInt(document.getElementById('totalPackages').value) || 1,
+        minStock: parseFloat(document.getElementById('minStock').value) || 0,
+        invoice: document.getElementById('invoice').value.trim() || 'N/A',
+        expirationDate: document.getElementById('validade').value || null,
+        locationId: document.getElementById('locationId').value,
+        status: document.getElementById('status').value,
+        location: state.locationsCache.find(loc => loc.id === document.getElementById('locationId').value)?.room || '',
+        parentProductId: generateParentProductId(document.getElementById('productName').value.trim())
+    };
+
+    const stockCheck = checkGlobalStock(productData.productName, productData.quantity);
+    if (stockCheck && stockCheck.isLow) {
+        if (!confirm(`O estoque total de ${productData.productName} será ${stockCheck.totalStock.toFixed(2)}, abaixo do mínimo global de ${stockCheck.globalMinStock.toFixed(2)}. Continuar?`)) {
             return;
         }
-        
-        const url = isEdit ? `${CONFIG.API_BASE_URL}/api/stock/${product.id}?index=${state.stockData.findIndex(p => p.id === product.id)}` : `${CONFIG.API_BASE_URL}/api/stock`;
-        const method = isEdit ? 'PUT' : 'POST';
-        
+    }
+
+    showLoading();
+    try {
+        const method = productData.id ? 'PUT' : 'POST';
+        const url = productData.id ? `${config.apiUrl}/stock/${productData.id}?index=${document.getElementById('rowIndex').value}` : `${config.apiUrl}/stock`;
         const response = await fetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(product)
+            body: JSON.stringify(productData)
         });
-        
+
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || `Erro ao ${isEdit ? 'atualizar' : 'adicionar'} produto`);
+            throw new Error(errorData.error || `Erro HTTP ${response.status}`);
         }
-        
-        await loadStock();
-        applyFilters();
-        displayStock();
-        checkExpiringProducts();
-        closeProductModal();
-    } catch (error) {
-        console.error('[CRUD] Erro ao salvar produto:', error);
-        alert(`Erro ao salvar produto: ${error.message}`);
-    } finally {
-        hideLoading();
-    }
-}
 
-function editProduct(id) {
-    const product = state.stockData.find(p => p.id === id);
-    if (product) {
-        openProductModal('Editar Produto', product);
-    } else {
-        alert('Produto não encontrado.');
-    }
-}
-
-async function deleteProduct(id) {
-    if (!confirm('Tem certeza que deseja excluir este produto?')) {
-        return;
-    }
-    
-    showLoading();
-    
-    try {
-        const index = state.stockData.findIndex(p => p.id === id);
-        if (index === -1) {
-            throw new Error('Produto não encontrado');
-        }
-        
-        const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${id}?index=${index}`, {
-            method: 'DELETE'
-        });
-        
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Erro ao excluir produto');
-        }
-        
-        await loadStock();
-        applyFilters();
-        displayStock();
-        checkExpiringProducts();
-    } catch (error) {
-        console.error('[CRUD] Erro ao excluir produto:', error);
-        alert(`Erro ao excluir produto: ${error.message}`);
-    } finally {
-        hideLoading();
-    }
-}
-
-// ==================== CRUD LOCALIDADES ====================
-async function saveLocation(event) {
-    event.preventDefault();
-    showLoading();
-    
-    try {
-        const locationId = document.getElementById('locationId').value;
-        const isEdit = !!locationId;
-        
-        const location = {
-            id: locationId || `loc_${Date.now()}`,
-            room: document.getElementById('room').value.trim(),
-            cabinet: document.getElementById('cabinet').value.trim()
-        };
-        
-        if (!location.room) {
-            alert('Por favor, preencha o nome da sala.');
-            return;
-        }
-        
-        const url = isEdit ? `${CONFIG.API_BASE_URL}/api/locations/${location.id}?index=${state.locationsData.findIndex(l => l.id === location.id)}` : `${CONFIG.API_BASE_URL}/api/locations`;
-        const method = isEdit ? 'PUT' : 'POST';
-        
-        const response = await fetch(url, {
-            method,
+        // Atualizar estoque mínimo global
+        await fetch(`${config.apiUrl}/globalMinStock`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(location)
+            body: JSON.stringify({ productName: productData.productName, minStock: productData.minStock })
         });
-        
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `Erro ao ${isEdit ? 'atualizar' : 'adicionar'} localidade`);
-        }
-        
-        await loadLocations();
-        displayLocations();
-        closeLocationModal();
+
+        await loadAndDisplayStock();
+        closeModal('productModal');
+        showError('form-error', `Produto ${productData.id ? 'atualizado' : 'adicionado'} com sucesso!`, true);
     } catch (error) {
-        console.error('[CRUD] Erro ao salvar localidade:', error);
-        alert(`Erro ao salvar localidade: ${error.message}`);
+        showError('modal-error', error.message);
     } finally {
         hideLoading();
     }
 }
 
-function editLocation(id) {
-    const location = state.locationsData.find(l => l.id === id);
-    if (location) {
-        openLocationModal('Editar Localidade', location);
-    } else {
-        alert('Localidade não encontrada.');
-    }
-}
-
-async function deleteLocation(id) {
-    if (!confirm('Tem certeza que deseja excluir esta localidade?')) {
+async function editProduct(id, index) {
+    const product = state.products.find(p => p.id === id);
+    if (!product) {
+        showError('form-error', 'Produto não encontrado!');
         return;
     }
-    
+
+    const modalTitle = document.getElementById('modalTitle');
+    const productIdInput = document.getElementById('productId');
+    const productNameInput = document.getElementById('productName');
+    const manufacturerInput = document.getElementById('manufacturer');
+    const batchInput = document.getElementById('batch');
+    const unitInput = document.getElementById('unit');
+    const packageTypeInput = document.getElementById('packageType');
+    const totalPackagesInput = document.getElementById('totalPackages');
+    const minStockInput = document.getElementById('minStock');
+    const invoiceInput = document.getElementById('invoice');
+    const validadeInput = document.getElementById('validade');
+    const locationIdInput = document.getElementById('locationId');
+    const statusInput = document.getElementById('status');
+    const rowIndexInput = document.getElementById('rowIndex');
+    const modalError = document.getElementById('modal-error');
+    const productModal = document.getElementById('productModal');
+
+    if (modalTitle) modalTitle.textContent = 'Editar Produto';
+    if (productIdInput) productIdInput.value = id;
+    if (productNameInput) productNameInput.value = product.productName;
+    if (manufacturerInput) manufacturerInput.value = product.manufacturer;
+    if (batchInput) batchInput.value = product.batch;
+    if (unitInput) unitInput.value = product.unit;
+    if (packageTypeInput) packageTypeInput.value = product.packageType;
+    if (totalPackagesInput) totalPackagesInput.value = product.totalPackages;
+    if (minStockInput) minStockInput.value = product.minStock;
+    if (invoiceInput) invoiceInput.value = product.invoice;
+    if (validadeInput) validadeInput.value = product.expirationDate ? product.expirationDate.split('T')[0] : '';
+    if (locationIdInput) locationIdInput.value = product.locationId;
+    if (statusInput) statusInput.value = product.status;
+    if (rowIndexInput) rowIndexInput.value = index;
+    if (modalError) modalError.style.display = 'none';
+
+    await updateLocationSelect();
+
+    const stockCheck = checkGlobalStock(product.productName);
+    const globalMinStockDisplay = document.getElementById('global-min-stock-display');
+    if (globalMinStockDisplay) {
+        globalMinStockDisplay.textContent = stockCheck ? stockCheck.globalMinStock.toFixed(2) : '0.00';
+    }
+
+    if (productModal) productModal.style.display = 'block';
+}
+
+async function useProduct(id, index) {
+    const quantityInput = document.getElementById(`quantity-use-${id}`);
+    const quantityUsed = parseFloat(quantityInput?.value || '0');
+
+    if (isNaN(quantityUsed) || quantityUsed <= 0) {
+        showError('form-error', 'Por favor, insira uma quantidade válida maior que zero!');
+        quantityInput?.focus();
+        return;
+    }
+
+    const product = state.products.find(p => p.id === id);
+    if (!product) {
+        showError('form-error', 'Produto não encontrado!');
+        return;
+    }
+
+    if (product.quantity < quantityUsed) {
+        showError('form-error', `Quantidade insuficiente! Disponível: ${product.quantity}`);
+        quantityInput?.focus();
+        return;
+    }
+
     showLoading();
-    
     try {
-        const index = state.locationsData.findIndex(l => l.id === id);
-        if (index === -1) {
-            throw new Error('Localidade não encontrada');
-        }
-        
-        const response = await fetch(`${CONFIG.API_BASE_URL}/api/locations/${id}?index=${index}`, {
-            method: 'DELETE'
+        const response = await fetch(`${config.apiUrl}/stock/${id}/use?index=${index}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quantityUsed: quantityUsed.toFixed(2) })
         });
-        
+
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || 'Erro ao excluir localidade');
+            throw new Error(errorData.error || `Erro ao usar produto`);
         }
-        
-        await loadLocations();
-        displayLocations();
+
+        await loadAndDisplayStock();
+        if (quantityInput) quantityInput.value = '';
+        showError('form-error', `Produto usado com sucesso!`, true);
     } catch (error) {
-        console.error('[CRUD] Erro ao excluir localidade:', error);
-        alert(`Erro ao excluir localidade: ${error.message}`);
+        showError('form-error', `Erro: ${error.message}`);
     } finally {
         hideLoading();
     }
 }
 
-// ==================== UTILITÁRIOS ====================
+async function finishProduct(id, index) {
+    if (!confirm('Tem certeza que deseja esgotar esta embalagem?')) return;
+
+    showLoading();
+    try {
+        const product = state.products.find(p => p.id === id);
+        const response = await fetch(`${config.apiUrl}/stock/${id}?index=${index}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...product, status: 'esgotado', quantity: 0 })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Erro ao esgotar produto`);
+        }
+
+        await loadAndDisplayStock();
+        showError('form-error', 'Embalagem esgotada com sucesso!', true);
+    } catch (error) {
+        showError('form-error', `Erro: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function deleteProduct(id, index) {
+    if (!confirm('Tem certeza que deseja excluir este produto?')) return;
+
+    showLoading();
+    try {
+        const response = await fetch(`${config.apiUrl}/stock/${id}?index=${index}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Erro HTTP ${response.status}`);
+        }
+
+        await loadAndDisplayStock();
+        showError('form-error', 'Produto excluído com sucesso!', true);
+    } catch (error) {
+        showError('form-error', `Erro: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+function showError(elementId, message, isSuccess = false) {
+    const errorDiv = document.getElementById(elementId);
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.className = `message ${isSuccess ? 'success' : 'error'}`;
+        errorDiv.style.display = 'block';
+        setTimeout(() => errorDiv.style.display = 'none', 5000);
+    }
+}
+
 function showLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-        overlay.classList.add('active');
-    } else {
-        console.error('[UI] Elemento loadingOverlay não encontrado');
-    }
+    const loadingElement = document.getElementById('loading');
+    if (loadingElement) loadingElement.style.display = 'block';
 }
 
 function hideLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-        overlay.classList.remove('active');
-    }
+    const loadingElement = document.getElementById('loading');
+    if (loadingElement) loadingElement.style.display = 'none';
 }
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.style.display = 'none';
 }
 
-function formatNumber(num) {
-    return new Intl.NumberFormat('pt-BR', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2
-    }).format(num);
+function generateParentProductId(productName) {
+    const cleanName = productName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return `prod_${cleanName}_${Math.random().toString(36).substring(2, 8)}`;
 }
 
-function formatDate(dateString) {
-    if (!dateString || isNaN(new Date(dateString))) return 'N/A';
-    const date = new Date(dateString + 'T00:00:00');
-    return date.toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    });
-}
-
-function formatDateTime(isoString) {
-    if (!isoString || isNaN(new Date(isoString))) return 'N/A';
-    const date = new Date(isoString);
-    return date.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
-
-// ==================== EVENT LISTENERS ====================
-function initializeEventListeners() {
-    console.log('[Events] Inicializando event listeners');
-    
-    document.getElementById('stockTabBtn')?.addEventListener('click', () => showTab('stock'));
-    document.getElementById('locationsTabBtn')?.addEventListener('click', () => showTab('locations'));
-    document.getElementById('logsTabBtn')?.addEventListener('click', () => showTab('logs'));
-    
-    document.getElementById('addProductBtn')?.addEventListener('click', () => openProductModal());
-    document.getElementById('addLocationBtn')?.addEventListener('click', () => openLocationModal());
-    
-    document.getElementById('closeModal')?.addEventListener('click', closeProductModal);
-    document.getElementById('cancelBtn')?.addEventListener('click', closeProductModal);
-    document.getElementById('productForm')?.addEventListener('submit', saveProduct);
-    
-    document.getElementById('closeLocationModal')?.addEventListener('click', closeLocationModal);
-    document.getElementById('cancelLocationBtn')?.addEventListener('click', closeLocationModal);
-    document.getElementById('locationForm')?.addEventListener('submit', saveLocation);
-    
-    document.querySelectorAll('.modal-overlay').forEach(overlay => {
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) {
-                closeProductModal();
-                closeLocationModal();
-            }
-        });
-    });
-    
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            state.searchQuery = e.target.value;
-            applyFilters();
-            displayStock();
-        });
-    } else {
-        console.error('[UI] Elemento searchInput não encontrado');
-    }
-    
-    const statusFilter = document.getElementById('statusFilter');
-    if (statusFilter) {
-        statusFilter.addEventListener('change', (e) => {
-            state.statusFilter = e.target.value;
-            applyFilters();
-            displayStock();
-        });
-    } else {
-        console.error('[UI] Elemento statusFilter não encontrado');
-    }
-    
-    document.getElementById('prevPage')?.addEventListener('click', previousPage);
-    document.getElementById('nextPage')?.addEventListener('click', nextPage);
-    
-    console.log('[Events] Event listeners inicializados');
-}
+document.addEventListener('DOMContentLoaded', () => {
+    loadAndDisplayStock();
+    updateLocationSelect('locationFilter');
+});
