@@ -53,11 +53,11 @@ app.get('/api/stock', async (req, res) => {
 
             const item = {
                 id: row[0] || `temp_${Date.now()}_${index}`,
-                product: row[1] || '',
+                product: row[1] || 'Produto Desconhecido',
                 manufacturer: row[2] || '',
-                batch: row[3] || '',
+                batch: row[3] || `Lote_${index + 2}`,
                 quantity: parseFloat(quantityStr) || 0,
-                unit: row[5] || '',
+                unit: row[5] || 'un',
                 packaging: row[6] || '',
                 packagingNumber: parseInt(row[7]) || 1,
                 minimumStock: parseFloat(minimumStockStr) || 0,

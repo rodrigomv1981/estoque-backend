@@ -113,20 +113,27 @@ async function loadLogs() {
 
 // ==================== FILTROS E BUSCA ====================
 function applyFilters() {
+    const searchTerm = document.getElementById('searchInput')?.value.toLowerCase() || '';
+    const locationFilter = document.getElementById('locationFilter')?.value || '';
+    const statusFilter = document.getElementById('statusFilter')?.value || '';
     let filtered = [...state.stockData];
-    if (state.searchQuery) {
-        const query = state.searchQuery.toLowerCase();
-        filtered = filtered.filter(item => 
-            (item.product && item.product.toLowerCase().includes(query)) ||
-            (item.batch && item.batch.toLowerCase().includes(query)) ||
-            (item.manufacturer && item.manufacturer.toLowerCase().includes(query))
+    if (searchTerm) {
+        filtered = filtered.filter(item =>
+            item.product.toLowerCase().includes(searchTerm) ||
+            item.batch.toLowerCase().includes(searchTerm) ||
+            item.manufacturer.toLowerCase().includes(searchTerm)
         );
     }
-    if (state.statusFilter) {
-        filtered = filtered.filter(item => item.status === state.statusFilter);
+    if (locationFilter) {
+        filtered = filtered.filter(item => item.location === locationFilter);
+    }
+    if (statusFilter) {
+        filtered = filtered.filter(item => 
+            statusFilter === 'disponivel' ? item.quantity > 0 : item.quantity === 0
+        );
     }
     state.filteredStockData = filtered;
-    state.currentPage = 1;
+    updatePagination();
 }
 
 function groupByProduct(data) {
@@ -210,6 +217,27 @@ function displayStock() {
     updatePagination(state.filteredStockData.length);
 }
 
+function populateFilters() {
+    const statusFilter = document.getElementById('statusFilter');
+    if (statusFilter) {
+        statusFilter.innerHTML = `
+            <option value="">Todos os Status</option>
+            <option value="disponivel">Disponível</option>
+            <option value="esgotado">Esgotado</option>
+        `;
+    }
+    const locationFilter = document.getElementById('locationFilter');
+    if (locationFilter) {
+        locationFilter.innerHTML = '<option value="">Todas as Localizações</option>';
+        state.locationsData.forEach(location => {
+            const option = document.createElement('option');
+            option.value = location.id;
+            option.textContent = location.cabinet ? `${location.room} - ${location.cabinet}` : location.room;
+            locationFilter.appendChild(option);
+        });
+    }
+}
+
 function getLocationName(locationId) {
     if (!locationId) return 'Não definida';
     const location = state.locationsData.find(loc => loc.id === locationId);
@@ -270,6 +298,7 @@ function createProductCard(item) {
                     </svg>
                     Editar
                 </button>
+                ${item.quantity > 0 ? `
                 <button class="btn-action delete" data-id="${item.id}" aria-label="Excluir produto ${escapeHtml(item.product)}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="3 6 5 6 21 6"></polyline>
@@ -298,6 +327,7 @@ function createProductCard(item) {
                     </svg>
                     Transferir
                 </button>
+                ` : ''}
                 ` : ''}
             </div>
         </div>
@@ -845,12 +875,32 @@ async function handleUseProductSubmit(e) {
     }
 }
 
+function populateLocationSelect() {
+    const select = document.getElementById('location');
+    const transferSelect = document.getElementById('transferLocation');
+    if (!select || !transferSelect) {
+        console.error('[populateLocationSelect] Elementos select ou transferSelect não encontrados');
+        return;
+    }
+    select.innerHTML = '<option value="">Selecione uma localização</option>';
+    transferSelect.innerHTML = '<option value="">Selecione uma localização</option>';
+    state.locationsData.forEach(location => {
+        const option = document.createElement('option');
+        option.value = location.id;
+        option.textContent = location.cabinet ? `${location.room} - ${location.cabinet}` : location.room;
+        select.appendChild(option.cloneNode(true));
+        transferSelect.appendChild(option);
+    });
+    console.log('[populateLocationSelect] Opções de localização adicionadas:', state.locationsData.length);
+}
+
 async function handleTransferProductSubmit(e) {
     e.preventDefault();
     showLoading();
     try {
         const productId = document.getElementById('transferProductId').value;
         const newLocationId = document.getElementById('transferLocation').value;
+        console.log('[handleTransferProductSubmit] Transferindo produto:', { productId, newLocationId });
         if (!newLocationId) {
             throw new Error('Selecione uma localização válida.');
         }
@@ -861,11 +911,10 @@ async function handleTransferProductSubmit(e) {
         if (product.packagingNumber <= 1) {
             throw new Error('Produto não possui múltiplas embalagens para transferência.');
         }
-        // Atualizar o produto original
         const updatedProduct = {
             ...product,
             packagingNumber: product.packagingNumber - 1,
-            quantity: product.quantity / product.packagingNumber // Assume quantidade dividida igualmente
+            quantity: product.quantity / product.packagingNumber
         };
         const index = state.stockData.findIndex(p => p.id === productId);
         const updateResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
@@ -876,7 +925,6 @@ async function handleTransferProductSubmit(e) {
         if (!updateResponse.ok) {
             throw new Error(`Erro ao atualizar produto: ${updateResponse.status} ${updateResponse.statusText}`);
         }
-        // Criar novo produto
         const newProduct = {
             ...product,
             id: `prod_${Date.now()}`,
@@ -884,6 +932,7 @@ async function handleTransferProductSubmit(e) {
             quantity: product.quantity / product.packagingNumber,
             location: newLocationId
         };
+        console.log('[handleTransferProductSubmit] Novo produto:', newProduct);
         const addResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -915,8 +964,17 @@ async function exhaustProduct(productId) {
         if (!product) {
             throw new Error('Produto não encontrado.');
         }
-        if (!product.product || !product.batch || !product.unit || !product.location || !product.status) {
-            throw new Error('Produto com dados incompletos. Verifique os campos obrigatórios.');
+        // Validar campos obrigatórios
+        const missingFields = [];
+        if (!product.product) missingFields.push('product');
+        if (!product.batch) missingFields.push('batch');
+        if (product.quantity === undefined || product.quantity === null) missingFields.push('quantity');
+        if (!product.unit) missingFields.push('unit');
+        if (!product.location) missingFields.push('location');
+        if (!product.status) missingFields.push('status');
+        if (missingFields.length > 0) {
+            console.error('[exhaustProduct] Campos obrigatórios ausentes:', missingFields, 'Produto:', product);
+            throw new Error(`Produto com dados incompletos. Campos ausentes: ${missingFields.join(', ')}.`);
         }
         const updatedProduct = {
             id: product.id,
