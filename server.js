@@ -37,16 +37,20 @@ app.get('/api/stock', async (req, res) => {
 
         const values = response.data.values || [];
         const stockData = values.map((row, index) => {
+            // Substituir vírgula por ponto em campos numéricos
+            const quantityStr = row[4] ? row[4].toString().replace(',', '.') : '0';
+            const minimumStockStr = row[8] ? row[8].toString().replace(',', '.') : '0';
+
             const item = {
                 id: row[0] || `temp_${Date.now()}_${index}`,
                 product: row[1] || '',
                 manufacturer: row[2] || '',
                 batch: row[3] || '',
-                quantity: parseFloat(row[4]) || 0,
+                quantity: parseFloat(quantityStr) || 0,
                 unit: row[5] || '',
                 packaging: row[6] || '',
                 packagingNumber: parseInt(row[7]) || 1,
-                minimumStock: parseFloat(row[8]) || 0,
+                minimumStock: parseFloat(minimumStockStr) || 0,
                 invoice: row[9] || '',
                 expirationDate: row[10] || '',
                 location: row[11] || '',

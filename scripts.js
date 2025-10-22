@@ -45,7 +45,6 @@ async function loadAllData() {
         displayStock();
         displayLocations();
         displayLogs();
-        checkExpiringProducts();
     } catch (error) {
         console.error('[Data] Erro ao carregar dados:', error);
         alert(`Erro ao carregar dados: ${error.message}. Verifique sua conexão ou contate o suporte.`);
@@ -217,7 +216,7 @@ function createProductCard(item) {
     const isLowStock = item.quantity <= item.minimumStock && item.minimumStock > 0;
     const location = state.locationsData.find(loc => loc.id === item.location);
     const locationName = location ? `${location.room}${location.cabinet ? ' - ' + location.cabinet : ''}` : 'Não definida';
-    return `
+    const cardHtml = `
         <div class="product-card ${expiryStatus.class} ${isLowStock ? 'low-stock' : ''}" data-id="${item.id}">
             <div class="product-header">
                 <div>
@@ -298,6 +297,8 @@ function createProductCard(item) {
             </div>
         </div>
     `;
+    console.log('[createProductCard] HTML gerado para item:', item.id, cardHtml);
+    return cardHtml;
 }
 
 function getExpiryStatus(expirationDate) {
@@ -333,34 +334,6 @@ function getExpiryBadge(expirationDate) {
         return `<span class="expiry-badge warning">${daysUntilExpiry} dias (${formattedDate})</span>`;
     }
     return `<span class="expiry-badge normal">${formattedDate}</span>`;
-}
-
-function checkExpiringProducts() {
-    const alert = document.getElementById('expiringAlert');
-    const message = document.getElementById('expiringMessage');
-    if (!alert || !message) {
-        console.error('[UI] Elementos expiringAlert ou expiringMessage não encontrados');
-        return;
-    }
-    const today = new Date();
-    const expiring = state.stockData.filter(item => {
-        if (!item.expirationDate || isNaN(new Date(item.expirationDate))) return false;
-        const expiry = new Date(item.expirationDate);
-        const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-        return daysUntilExpiry >= 0 && daysUntilExpiry <= CONFIG.EXPIRING_DAYS_WARNING;
-    });
-    if (expiring.length > 0) {
-        expiring.sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
-        const nearestExpiring = expiring[0];
-        const daysUntilExpiry = Math.ceil((new Date(nearestExpiring.expirationDate) - today) / (1000 * 60 * 60 * 24));
-        message.innerHTML = `
-            ${expiring.length} produto(s) próximo(s) ao vencimento. 
-            <strong>${escapeHtml(nearestExpiring.product)}</strong> vence em ${daysUntilExpiry} dia(s).
-        `;
-        alert.style.display = 'flex';
-    } else {
-        alert.style.display = 'none';
-    }
 }
 
 function displayLocations() {
@@ -770,7 +743,6 @@ async function handleProductSubmit(e) {
         await loadStock();
         applyFilters();
         displayStock();
-        checkExpiringProducts();
         closeProductModal();
         alert(productId ? 'Produto atualizado com sucesso!' : 'Produto adicionado com sucesso!');
     } catch (error) {
@@ -858,7 +830,6 @@ async function handleUseProductSubmit(e) {
         await loadStock();
         applyFilters();
         displayStock();
-        checkExpiringProducts();
         closeUseProductModal();
         alert(`Produto ${product.product} usado com sucesso!`);
     } catch (error) {
@@ -919,7 +890,6 @@ async function handleTransferProductSubmit(e) {
         await loadStock();
         applyFilters();
         displayStock();
-        checkExpiringProducts();
         closeTransferProductModal();
         alert(`Produto ${product.product} transferido com sucesso!`);
     } catch (error) {
@@ -960,7 +930,6 @@ async function exhaustProduct(productId) {
         await loadStock();
         applyFilters();
         displayStock();
-        checkExpiringProducts();
         alert(`Produto ${product.product} esgotado com sucesso!`);
     } catch (error) {
         console.error('[Form] Erro ao esgotar produto:', error);
@@ -990,7 +959,6 @@ async function deleteProduct(productId) {
         await loadStock();
         applyFilters();
         displayStock();
-        checkExpiringProducts();
         alert('Produto excluído com sucesso!');
     } catch (error) {
         console.error('[Form] Erro ao excluir produto:', error);
@@ -1054,7 +1022,7 @@ function escapeHtml(unsafe) {
 }
 
 function formatNumber(number) {
-    return Number.isFinite(number) ? number.toFixed(2) : '0,00';
+    return Number.isFinite(number) ? number.toFixed(2) : '0.00';
 }
 
 function formatDate(dateStr) {
