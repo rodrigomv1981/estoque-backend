@@ -210,12 +210,17 @@ function displayStock() {
     updatePagination(state.filteredStockData.length);
 }
 
+function getLocationName(locationId) {
+    if (!locationId) return 'Não definida';
+    const location = state.locationsData.find(loc => loc.id === locationId);
+    if (!location) return 'Não definida';
+    return escapeHtml(location.cabinet ? `${location.room} - ${location.cabinet}` : location.room);
+}
+
 function createProductCard(item) {
     const expiryStatus = getExpiryStatus(item.expirationDate);
     const expiryBadge = getExpiryBadge(item.expirationDate);
     const isLowStock = item.quantity <= item.minimumStock && item.minimumStock > 0;
-    const location = state.locationsData.find(loc => loc.id === item.location);
-    const locationName = location ? `${location.room}${location.cabinet ? ' - ' + location.cabinet : ''}` : 'Não definida';
     const cardHtml = `
         <div class="product-card ${expiryStatus.class} ${isLowStock ? 'low-stock' : ''}" data-id="${item.id}">
             <div class="product-header">
@@ -223,7 +228,7 @@ function createProductCard(item) {
                     <div class="product-name">${escapeHtml(item.product)}</div>
                     <div class="product-batch">Lote: ${escapeHtml(item.batch)}</div>
                 </div>
-                <span class="product-status ${item.status}">${item.status === 'disponivel' ? 'Disponível' : 'Indisponível'}</span>
+                <span class="product-status ${item.quantity > 0 ? 'disponivel' : 'esgotado'}">${item.quantity > 0 ? 'Disponível' : 'Esgotado'}</span>
             </div>
             <div class="product-info">
                 <div class="info-row">
@@ -242,7 +247,7 @@ function createProductCard(item) {
                 </div>
                 <div class="info-row">
                     <span class="info-label">Localização</span>
-                    <span class="info-value">${escapeHtml(locationName)}</span>
+                    <span class="info-value">${getLocationName(item.location)}</span>
                 </div>
                 ${item.packaging ? `
                 <div class="info-row">
@@ -910,7 +915,24 @@ async function exhaustProduct(productId) {
         if (!product) {
             throw new Error('Produto não encontrado.');
         }
-        const updatedProduct = { ...product, quantity: 0 };
+        if (!product.product || !product.batch || !product.unit || !product.location || !product.status) {
+            throw new Error('Produto com dados incompletos. Verifique os campos obrigatórios.');
+        }
+        const updatedProduct = {
+            id: product.id,
+            product: product.product,
+            batch: product.batch,
+            quantity: 0,
+            unit: product.unit,
+            location: product.location,
+            status: product.status,
+            manufacturer: product.manufacturer || '',
+            packaging: product.packaging || '',
+            packagingNumber: product.packagingNumber || 1,
+            minimumStock: product.minimumStock || 0,
+            invoice: product.invoice || '',
+            expirationDate: product.expirationDate || ''
+        };
         const index = state.stockData.findIndex(p => p.id === productId);
         console.log('[exhaustProduct] Enviando atualização:', { productId, index, updatedProduct });
         const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {

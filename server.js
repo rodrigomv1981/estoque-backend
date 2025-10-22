@@ -27,6 +27,17 @@ app.get('/health', (req, res) => {
 });
 
 // Rota para carregar dados de estoque
+function normalizeDate(dateStr) {
+    if (!dateStr) return '';
+    const regex = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/;
+    const match = dateStr.match(regex);
+    if (match) {
+        const [_, day, month, year] = match;
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    return isNaN(new Date(dateStr)) ? '' : dateStr;
+}
+
 app.get('/api/stock', async (req, res) => {
     try {
         console.log('[API] Carregando dados de estoque...');
@@ -37,7 +48,6 @@ app.get('/api/stock', async (req, res) => {
 
         const values = response.data.values || [];
         const stockData = values.map((row, index) => {
-            // Substituir vírgula por ponto em campos numéricos
             const quantityStr = row[4] ? row[4].toString().replace(',', '.') : '0';
             const minimumStockStr = row[8] ? row[8].toString().replace(',', '.') : '0';
 
@@ -52,12 +62,11 @@ app.get('/api/stock', async (req, res) => {
                 packagingNumber: parseInt(row[7]) || 1,
                 minimumStock: parseFloat(minimumStockStr) || 0,
                 invoice: row[9] || '',
-                expirationDate: row[10] || '',
+                expirationDate: normalizeDate(row[10]),
                 location: row[11] || '',
                 status: row[12] || 'disponivel'
             };
 
-            // Validação
             if (!item.product || !item.batch) {
                 console.warn(`[API] Item inválido na linha ${index + 2}: product ou batch ausente`);
             }

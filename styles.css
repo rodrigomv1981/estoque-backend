@@ -1065,4 +1065,9 @@ body {
         padding: 0.4rem 0.8rem;
         font-size: 0.8rem;
     }
+	
+.product-status.esgotado {
+    background: #e5e7eb;
+    color: #1f2937;
+	}
 }
