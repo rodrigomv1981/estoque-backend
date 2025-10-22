@@ -11,6 +11,7 @@ const state = {
     currentPage: 1,
     stockData: [],
     locationsData: [],
+    logsData: [],
     filteredStockData: [],
     searchQuery: '',
     statusFilter: ''
@@ -104,11 +105,11 @@ async function loadLogs() {
         if (!result || typeof result !== 'object' || !result.success) {
             throw new Error('Resposta do servidor em formato inválido');
         }
-        console.log('[Data] Logs carregados:', result.data.length, 'itens');
-        return Array.isArray(result.data) ? result.data : [];
+        state.logsData = Array.isArray(result.data) ? result.data : [];
+        console.log('[Data] Logs carregados:', state.logsData.length, 'itens');
     } catch (error) {
         console.error('[Data] Erro ao carregar logs:', error);
-        return [];
+        throw error;
     }
 }
 
@@ -128,31 +129,6 @@ function applyFilters() {
     }
     state.filteredStockData = filtered;
     state.currentPage = 1;
-}
-
-function groupByProductAndBatch(data) {
-    const grouped = {};
-    data.forEach(item => {
-        if (!item.product || !item.batch) {
-            console.warn('[Data] Item com product ou batch inválido:', item);
-            return;
-        }
-        const key = `${item.product}_${item.batch}`;
-        if (!grouped[key]) {
-            grouped[key] = {
-                ...item,
-                totalQuantity: 0,
-                items: []
-            };
-        }
-        grouped[key].totalQuantity += item.quantity || 0;
-        grouped[key].items.push(item);
-        if (!grouped[key].expirationDate || 
-            (item.expirationDate && item.expirationDate < grouped[key].expirationDate)) {
-            grouped[key].expirationDate = item.expirationDate;
-        }
-    });
-    return Object.values(grouped);
 }
 
 function groupByProduct(data) {
@@ -198,11 +174,9 @@ function displayStock() {
         alert('Erro na interface: elemento de estoque não encontrado. Contate o suporte.');
         return;
     }
-    const grouped = groupByProductAndBatch(state.filteredStockData);
-    const sorted = sortByExpirationDate(grouped);
     const start = (state.currentPage - 1) * CONFIG.ITEMS_PER_PAGE;
     const end = start + CONFIG.ITEMS_PER_PAGE;
-    const paginated = sorted.slice(start, end);
+    const paginated = sortByExpirationDate(state.filteredStockData).slice(start, end);
     if (paginated.length === 0) {
         stockList.innerHTML = `
             <div class="empty-state">
@@ -215,9 +189,9 @@ function displayStock() {
             </div>
         `;
     } else {
-        stockList.innerHTML = paginated.map(group => createProductCard(group)).join('');
+        stockList.innerHTML = paginated.map(item => createProductCard(item)).join('');
     }
-    updatePagination(sorted.length);
+    updatePagination(state.filteredStockData.length);
 }
 
 function displayTotalStock() {
@@ -249,28 +223,28 @@ function displayTotalStock() {
     `).join('');
 }
 
-function createProductCard(group) {
-    const expiryStatus = getExpiryStatus(group.expirationDate);
-    const expiryBadge = getExpiryBadge(group.expirationDate);
-    const isLowStock = group.totalQuantity <= group.minimumStock && group.minimumStock > 0;
+function createProductCard(item) {
+    const expiryStatus = getExpiryStatus(item.expirationDate);
+    const expiryBadge = getExpiryBadge(item.expirationDate);
+    const isLowStock = item.quantity <= item.minimumStock && item.minimumStock > 0;
     return `
-        <div class="product-card ${expiryStatus.class} ${isLowStock ? 'low-stock' : ''}" data-id="${group.items[0].id}">
+        <div class="product-card ${expiryStatus.class} ${isLowStock ? 'low-stock' : ''}" data-id="${item.id}">
             <div class="product-header">
                 <div>
-                    <div class="product-name">${escapeHtml(group.product)}</div>
-                    <div class="product-batch">Lote: ${escapeHtml(group.batch)}</div>
+                    <div class="product-name">${escapeHtml(item.product)}</div>
+                    <div class="product-batch">Lote: ${escapeHtml(item.batch)}</div>
                 </div>
-                <span class="product-status ${group.status}">${group.status === 'disponivel' ? 'Disponível' : 'Indisponível'}</span>
+                <span class="product-status ${item.status}">${item.status === 'disponivel' ? 'Disponível' : 'Indisponível'}</span>
             </div>
             <div class="product-info">
                 <div class="info-row">
-                    <span class="info-label">Quantidade Total</span>
-                    <span class="quantity-badge">${formatNumber(group.totalQuantity)} ${escapeHtml(group.unit)}</span>
+                    <span class="info-label">Quantidade</span>
+                    <span class="quantity-badge">${formatNumber(item.quantity)} ${escapeHtml(item.unit)}</span>
                 </div>
-                ${group.manufacturer ? `
+                ${item.manufacturer ? `
                 <div class="info-row">
                     <span class="info-label">Fabricante</span>
-                    <span class="info-value">${escapeHtml(group.manufacturer)}</span>
+                    <span class="info-value">${escapeHtml(item.manufacturer)}</span>
                 </div>
                 ` : ''}
                 <div class="info-row">
@@ -279,51 +253,51 @@ function createProductCard(group) {
                 </div>
                 <div class="info-row">
                     <span class="info-label">Localização</span>
-                    <span class="info-value">${escapeHtml(group.location || 'Não definida')}</span>
+                    <span class="info-value">${escapeHtml(item.location || 'Não definida')}</span>
                 </div>
-                ${group.packaging ? `
+                ${item.packaging ? `
                 <div class="info-row">
                     <span class="info-label">Embalagem</span>
-                    <span class="info-value">${escapeHtml(group.packaging)} (${group.packagingNumber}x)</span>
+                    <span class="info-value">${escapeHtml(item.packaging)} (${item.packagingNumber}x)</span>
                 </div>
                 ` : ''}
                 ${isLowStock ? `
                 <div class="info-row">
                     <span class="info-label" style="color: var(--info);">⚠️ Estoque Baixo</span>
-                    <span class="info-value" style="color: var(--info);">Mín: ${formatNumber(group.minimumStock)} ${escapeHtml(group.unit)}</span>
+                    <span class="info-value" style="color: var(--info);">Mín: ${formatNumber(item.minimumStock)} ${escapeHtml(item.unit)}</span>
                 </div>
                 ` : ''}
             </div>
             <div class="product-actions">
-                <button class="btn-action edit" aria-label="Editar produto ${escapeHtml(group.product)}">
+                <button class="btn-action edit" data-id="${item.id}" aria-label="Editar produto ${escapeHtml(item.product)}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                     Editar
                 </button>
-                <button class="btn-action delete" aria-label="Excluir produto ${escapeHtml(group.product)}">
+                <button class="btn-action delete" data-id="${item.id}" aria-label="Excluir produto ${escapeHtml(item.product)}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     </svg>
                     Excluir
                 </button>
-                <button class="btn-action use" aria-label="Usar produto ${escapeHtml(group.product)}">
+                <button class="btn-action use" data-id="${item.id}" aria-label="Usar produto ${escapeHtml(item.product)}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M4 12h16"></path>
                     </svg>
                     Usar
                 </button>
-                <button class="btn-action exhaust" aria-label="Esgotar produto ${escapeHtml(group.product)}">
+                <button class="btn-action exhaust" data-id="${item.id}" aria-label="Esgotar produto ${escapeHtml(item.product)}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
                         <path d="M12 8v8"></path>
                     </svg>
                     Esgotar
                 </button>
-                ${group.packagingNumber > 1 ? `
-                <button class="btn-action transfer" aria-label="Transferir produto ${escapeHtml(group.product)}">
+                ${item.packagingNumber > 1 ? `
+                <button class="btn-action transfer" data-id="${item.id}" aria-label="Transferir produto ${escapeHtml(item.product)}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                         <circle cx="12" cy="10" r="3"></circle>
@@ -420,7 +394,7 @@ function displayLocations() {
         return;
     }
     locationsList.innerHTML = state.locationsData.map(loc => `
-        <div class="location-card">
+        <div class="location-card" data-id="${loc.id}">
             <div class="location-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
@@ -430,14 +404,14 @@ function displayLocations() {
             <div class="location-name">${escapeHtml(loc.room)}</div>
             <div class="location-details">${escapeHtml(loc.cabinet || 'Sem armário')}</div>
             <div class="location-actions">
-                <button class="btn-action edit" onclick="editLocation('${loc.id}')" aria-label="Editar localidade ${escapeHtml(loc.room)}">
+                <button class="btn-action edit" data-id="${loc.id}" aria-label="Editar localidade ${escapeHtml(loc.room)}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                     Editar
                 </button>
-                <button class="btn-action delete" onclick="deleteLocation('${loc.id}')" aria-label="Excluir localidade ${escapeHtml(loc.room)}">
+                <button class="btn-action delete" data-id="${loc.id}" aria-label="Excluir localidade ${escapeHtml(loc.room)}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -449,15 +423,14 @@ function displayLocations() {
     `).join('');
 }
 
-async function displayLogs() {
+function displayLogs() {
     const logsList = document.getElementById('logsList');
     if (!logsList) {
         console.error('[UI] Elemento logsList não encontrado no DOM');
         alert('Erro na interface: elemento de logs não encontrado. Contate o suporte.');
         return;
     }
-    const logs = await loadLogs();
-    if (logs.length === 0) {
+    if (state.logsData.length === 0) {
         logsList.innerHTML = `
             <div class="empty-state">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -470,7 +443,7 @@ async function displayLogs() {
         `;
         return;
     }
-    logsList.innerHTML = logs.slice(0, 50).map(log => `
+    logsList.innerHTML = state.logsData.slice(0, 50).map(log => `
         <div class="log-item">
             <div class="log-header">
                 <span class="log-action">${escapeHtml(log.action)}</span>
@@ -513,9 +486,6 @@ function showTab(tabName) {
     if (selectedNav) {
         selectedNav.classList.add('active');
     }
-    if (tabName === 'logs') {
-        displayLogs();
-    }
 }
 
 function previousPage() {
@@ -548,18 +518,18 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
     modalTitle.textContent = title;
     if (product) {
         document.getElementById('productId').value = product.id;
-        document.getElementById('productName').value = product.product;
-        document.getElementById('manufacturer').value = product.manufacturer;
-        document.getElementById('batch').value = product.batch;
-        document.getElementById('quantity').value = product.quantity;
-        document.getElementById('unit').value = product.unit;
-        document.getElementById('packaging').value = product.packaging;
-        document.getElementById('packagingNumber').value = product.packagingNumber;
-        document.getElementById('minimumStock').value = product.minimumStock;
-        document.getElementById('invoice').value = product.invoice;
-        document.getElementById('expirationDate').value = product.expirationDate;
-        document.getElementById('location').value = product.location;
-        document.getElementById('status').value = product.status;
+        document.getElementById('productName').value = product.product || '';
+        document.getElementById('manufacturer').value = product.manufacturer || '';
+        document.getElementById('batch').value = product.batch || '';
+        document.getElementById('quantity').value = product.quantity || '';
+        document.getElementById('unit').value = product.unit || 'un';
+        document.getElementById('packaging').value = product.packaging || '';
+        document.getElementById('packagingNumber').value = product.packagingNumber || 1;
+        document.getElementById('minimumStock').value = product.minimumStock || 0;
+        document.getElementById('invoice').value = product.invoice || '';
+        document.getElementById('expirationDate').value = product.expirationDate || '';
+        document.getElementById('location').value = product.location || '';
+        document.getElementById('status').value = product.status || 'disponivel';
     } else {
         form.reset();
         document.getElementById('productId').value = '';
@@ -578,4 +548,543 @@ function closeProductModal() {
     }
 }
 
-function openLocationModal(title
+function openLocationModal(title = 'Adicionar Localidade', location = null) {
+    const modal = document.getElementById('locationModal');
+    const modalTitle = document.getElementById('locationModalTitle');
+    const form = document.getElementById('locationForm');
+    if (!modal || !modalTitle || !form) {
+        console.error('[UI] Elementos do modal de localidade não encontrados');
+        alert('Erro na interface: modal de localidade não encontrado. Contate o suporte.');
+        return;
+    }
+    modalTitle.textContent = title;
+    if (location) {
+        document.getElementById('locationId').value = location.id;
+        document.getElementById('room').value = location.room;
+        document.getElementById('cabinet').value = location.cabinet || '';
+    } else {
+        form.reset();
+        document.getElementById('locationId').value = '';
+    }
+    modal.classList.add('active');
+}
+
+function closeLocationModal() {
+    const modal = document.getElementById('locationModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+function openUseProductModal(product) {
+    const modal = document.getElementById('useProductModal');
+    const form = document.getElementById('useProductForm');
+    if (!modal || !form) {
+        console.error('[UI] Elementos do modal de uso não encontrados');
+        alert('Erro na interface: modal de uso não encontrado. Contate o suporte.');
+        return;
+    }
+    document.getElementById('useProductId').value = product.id;
+    document.getElementById('useQuantity').value = '';
+    modal.classList.add('active');
+}
+
+function closeUseProductModal() {
+    const modal = document.getElementById('useProductModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+function openTransferProductModal(product) {
+    const modal = document.getElementById('transferProductModal');
+    const transferLocation = document.getElementById('transferLocation');
+    if (!modal || !transferLocation) {
+        console.error('[UI] Elementos do modal de transferência não encontrados');
+        alert('Erro na interface: modal de transferência não encontrado. Contate o suporte.');
+        return;
+    }
+    document.getElementById('transferProductId').value = product.id;
+    populateTransferLocationDropdown(product.location);
+    modal.classList.add('active');
+}
+
+function closeTransferProductModal() {
+    const modal = document.getElementById('transferProductModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+function populateLocationDropdown() {
+    const select = document.getElementById('location');
+    if (!select) {
+        console.error('[UI] Elemento location select não encontrado');
+        return;
+    }
+    select.innerHTML = '<option value="">Selecione uma localização</option>';
+    state.locationsData.forEach(loc => {
+        const option = document.createElement('option');
+        option.value = loc.id;
+        option.textContent = `${loc.room}${loc.cabinet ? ' - ' + loc.cabinet : ''}`;
+        select.appendChild(option);
+    });
+}
+
+function populateTransferLocationDropdown(currentLocation) {
+    const select = document.getElementById('transferLocation');
+    if (!select) {
+        console.error('[UI] Elemento transferLocation select não encontrado');
+        return;
+    }
+    select.innerHTML = '<option value="">Selecione uma localização</option>';
+    state.locationsData.forEach(loc => {
+        if (loc.id !== currentLocation) {
+            const option = document.createElement('option');
+            option.value = loc.id;
+            option.textContent = `${loc.room}${loc.cabinet ? ' - ' + loc.cabinet : ''}`;
+            select.appendChild(option);
+        }
+    });
+}
+
+// ==================== EVENT LISTENERS ====================
+function initializeEventListeners() {
+    // Navegação
+    document.getElementById('stockTabBtn')?.addEventListener('click', () => showTab('stock'));
+    document.getElementById('locationsTabBtn')?.addEventListener('click', () => showTab('locations'));
+    document.getElementById('logsTabBtn')?.addEventListener('click', () => showTab('logs'));
+
+    // Paginação
+    document.getElementById('prevPage')?.addEventListener('click', previousPage);
+    document.getElementById('nextPage')?.addEventListener('click', nextPage);
+
+    // Filtros
+    document.getElementById('searchInput')?.addEventListener('input', (e) => {
+        state.searchQuery = e.target.value;
+        applyFilters();
+        displayStock();
+        displayTotalStock();
+    });
+    document.getElementById('statusFilter')?.addEventListener('change', (e) => {
+        state.statusFilter = e.target.value;
+        applyFilters();
+        displayStock();
+        displayTotalStock();
+    });
+
+    // Modais
+    document.getElementById('addProductBtn')?.addEventListener('click', () => openProductModal());
+    document.getElementById('closeModal')?.addEventListener('click', closeProductModal);
+    document.getElementById('cancelBtn')?.addEventListener('click', closeProductModal);
+    document.getElementById('productModal')?.querySelector('.modal-overlay')?.addEventListener('click', closeProductModal);
+    document.getElementById('productForm')?.addEventListener('submit', handleProductSubmit);
+
+    document.getElementById('addLocationBtn')?.addEventListener('click', () => openLocationModal());
+    document.getElementById('closeLocationModal')?.addEventListener('click', closeLocationModal);
+    document.getElementById('cancelLocationBtn')?.addEventListener('click', closeLocationModal);
+    document.getElementById('locationModal')?.querySelector('.modal-overlay')?.addEventListener('click', closeLocationModal);
+    document.getElementById('locationForm')?.addEventListener('submit', handleLocationSubmit);
+
+    document.getElementById('closeUseModal')?.addEventListener('click', closeUseProductModal);
+    document.getElementById('cancelUseBtn')?.addEventListener('click', closeUseProductModal);
+    document.getElementById('useProductModal')?.querySelector('.modal-overlay')?.addEventListener('click', closeUseProductModal);
+    document.getElementById('useProductForm')?.addEventListener('submit', handleUseProductSubmit);
+
+    document.getElementById('closeTransferModal')?.addEventListener('click', closeTransferProductModal);
+    document.getElementById('cancelTransferBtn')?.addEventListener('click', closeTransferProductModal);
+    document.getElementById('transferProductModal')?.querySelector('.modal-overlay')?.addEventListener('click', closeTransferProductModal);
+    document.getElementById('transferProductForm')?.addEventListener('submit', handleTransferProductSubmit);
+
+    // Delegação de eventos para botões dinâmicos
+    document.getElementById('stockList')?.addEventListener('click', (e) => {
+        const target = e.target.closest('.btn-action');
+        if (!target) return;
+        const productId = target.dataset.id;
+        const product = state.stockData.find(p => p.id === productId);
+        if (!product) {
+            alert('Produto não encontrado.');
+            return;
+        }
+        if (target.classList.contains('edit')) {
+            openProductModal('Editar Produto', product);
+        } else if (target.classList.contains('delete')) {
+            deleteProduct(productId);
+        } else if (target.classList.contains('use')) {
+            openUseProductModal(product);
+        } else if (target.classList.contains('exhaust')) {
+            exhaustProduct(productId);
+        } else if (target.classList.contains('transfer')) {
+            openTransferProductModal(product);
+        }
+    });
+
+    document.getElementById('locationsList')?.addEventListener('click', (e) => {
+        const target = e.target.closest('.btn-action');
+        if (!target) return;
+        const locationId = target.dataset.id;
+        const location = state.locationsData.find(loc => loc.id === locationId);
+        if (!location) {
+            alert('Localidade não encontrada.');
+            return;
+        }
+        if (target.classList.contains('edit')) {
+            openLocationModal('Editar Localidade', location);
+        } else if (target.classList.contains('delete')) {
+            deleteLocation(locationId);
+        }
+    });
+}
+
+// ==================== MANIPULAÇÃO DE FORMULÁRIOS ====================
+async function handleProductSubmit(e) {
+    e.preventDefault();
+    showLoading();
+    try {
+        const productId = document.getElementById('productId').value;
+        const product = {
+            id: productId || `prod_${Date.now()}`,
+            product: document.getElementById('productName').value,
+            manufacturer: document.getElementById('manufacturer').value,
+            batch: document.getElementById('batch').value,
+            quantity: parseFloat(document.getElementById('quantity').value) || 0,
+            unit: document.getElementById('unit').value,
+            packaging: document.getElementById('packaging').value,
+            packagingNumber: parseInt(document.getElementById('packagingNumber').value) || 1,
+            minimumStock: parseFloat(document.getElementById('minimumStock').value) || 0,
+            invoice: document.getElementById('invoice').value,
+            expirationDate: document.getElementById('expirationDate').value,
+            location: document.getElementById('location').value,
+            status: document.getElementById('status').value
+        };
+        let response;
+        if (productId) {
+            const index = state.stockData.findIndex(p => p.id === productId);
+            response = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(product)
+            });
+        } else {
+            response = await fetch(`${CONFIG.API_BASE_URL}/api/stock`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(product)
+            });
+        }
+        if (!response.ok) {
+            throw new Error(`Erro ao salvar produto: ${response.status} ${response.statusText}`);
+        }
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || 'Erro ao salvar produto');
+        }
+        await loadStock();
+        applyFilters();
+        displayStock();
+        displayTotalStock();
+        checkExpiringProducts();
+        closeProductModal();
+        alert(productId ? 'Produto atualizado com sucesso!' : 'Produto adicionado com sucesso!');
+    } catch (error) {
+        console.error('[Form] Erro ao salvar produto:', error);
+        alert(`Erro ao salvar produto: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function handleLocationSubmit(e) {
+    e.preventDefault();
+    showLoading();
+    try {
+        const locationId = document.getElementById('locationId').value;
+        const location = {
+            id: locationId || `loc_${Date.now()}`,
+            room: document.getElementById('room').value,
+            cabinet: document.getElementById('cabinet').value
+        };
+        let response;
+        if (locationId) {
+            const index = state.locationsData.findIndex(loc => loc.id === locationId);
+            response = await fetch(`${CONFIG.API_BASE_URL}/api/locations/${locationId}?index=${index}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(location)
+            });
+        } else {
+            response = await fetch(`${CONFIG.API_BASE_URL}/api/locations`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(location)
+            });
+        }
+        if (!response.ok) {
+            throw new Error(`Erro ao salvar localidade: ${response.status} ${response.statusText}`);
+        }
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || 'Erro ao salvar localidade');
+        }
+        await loadLocations();
+        displayLocations();
+        closeLocationModal();
+        alert(locationId ? 'Localidade atualizada com sucesso!' : 'Localidade adicionada com sucesso!');
+    } catch (error) {
+        console.error('[Form] Erro ao salvar localidade:', error);
+        alert(`Erro ao salvar localidade: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function handleUseProductSubmit(e) {
+    e.preventDefault();
+    showLoading();
+    try {
+        const productId = document.getElementById('useProductId').value;
+        const useQuantity = parseFloat(document.getElementById('useQuantity').value);
+        if (isNaN(useQuantity) || useQuantity <= 0) {
+            throw new Error('Quantidade inválida.');
+        }
+        const product = state.stockData.find(p => p.id === productId);
+        if (!product) {
+            throw new Error('Produto não encontrado.');
+        }
+        if (useQuantity > product.quantity) {
+            throw new Error('Quantidade a usar excede o estoque disponível.');
+        }
+        const updatedProduct = { ...product, quantity: product.quantity - useQuantity };
+        const index = state.stockData.findIndex(p => p.id === productId);
+        const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedProduct)
+        });
+        if (!response.ok) {
+            throw new Error(`Erro ao usar produto: ${response.status} ${response.statusText}`);
+        }
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || 'Erro ao usar produto');
+        }
+        await loadStock();
+        applyFilters();
+        displayStock();
+        displayTotalStock();
+        checkExpiringProducts();
+        closeUseProductModal();
+        alert(`Produto ${product.product} usado com sucesso!`);
+    } catch (error) {
+        console.error('[Form] Erro ao usar produto:', error);
+        alert(`Erro ao usar produto: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function handleTransferProductSubmit(e) {
+    e.preventDefault();
+    showLoading();
+    try {
+        const productId = document.getElementById('transferProductId').value;
+        const newLocationId = document.getElementById('transferLocation').value;
+        if (!newLocationId) {
+            throw new Error('Selecione uma localização válida.');
+        }
+        const product = state.stockData.find(p => p.id === productId);
+        if (!product) {
+            throw new Error('Produto não encontrado.');
+        }
+        if (product.packagingNumber <= 1) {
+            throw new Error('Produto não possui múltiplas embalagens para transferência.');
+        }
+        // Atualizar o produto original
+        const updatedProduct = {
+            ...product,
+            packagingNumber: product.packagingNumber - 1,
+            quantity: product.quantity / product.packagingNumber // Assume quantidade dividida igualmente
+        };
+        const index = state.stockData.findIndex(p => p.id === productId);
+        const updateResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedProduct)
+        });
+        if (!updateResponse.ok) {
+            throw new Error(`Erro ao atualizar produto: ${updateResponse.status} ${updateResponse.statusText}`);
+        }
+        // Criar novo produto
+        const newProduct = {
+            ...product,
+            id: `prod_${Date.now()}`,
+            packagingNumber: 1,
+            quantity: product.quantity / product.packagingNumber,
+            location: newLocationId
+        };
+        const addResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newProduct)
+        });
+        if (!addResponse.ok) {
+            throw new Error(`Erro ao criar novo produto: ${addResponse.status} ${addResponse.statusText}`);
+        }
+        await loadStock();
+        applyFilters();
+        displayStock();
+        displayTotalStock();
+        checkExpiringProducts();
+        closeTransferProductModal();
+        alert(`Produto ${product.product} transferido com sucesso!`);
+    } catch (error) {
+        console.error('[Form] Erro ao transferir produto:', error);
+        alert(`Erro ao transferir produto: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function exhaustProduct(productId) {
+    if (!confirm('Tem certeza que deseja esgotar este produto? A quantidade será zerada.')) {
+        return;
+    }
+    showLoading();
+    try {
+        const product = state.stockData.find(p => p.id === productId);
+        if (!product) {
+            throw new Error('Produto não encontrado.');
+        }
+        const updatedProduct = { ...product, quantity: 0 };
+        const index = state.stockData.findIndex(p => p.id === productId);
+        const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedProduct)
+        });
+        if (!response.ok) {
+            throw new Error(`Erro ao esgotar produto: ${response.status} ${response.statusText}`);
+        }
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || 'Erro ao esgotar produto');
+        }
+        await loadStock();
+        applyFilters();
+        displayStock();
+        displayTotalStock();
+        checkExpiringProducts();
+        alert(`Produto ${product.product} esgotado com sucesso!`);
+    } catch (error) {
+        console.error('[Form] Erro ao esgotar produto:', error);
+        alert(`Erro ao esgotar produto: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function deleteProduct(productId) {
+    if (!confirm('Tem certeza que deseja excluir este produto?')) {
+        return;
+    }
+    showLoading();
+    try {
+        const index = state.stockData.findIndex(p => p.id === productId);
+        const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) {
+            throw new Error(`Erro ao excluir produto: ${response.status} ${response.statusText}`);
+        }
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || 'Erro ao excluir produto');
+        }
+        await loadStock();
+        applyFilters();
+        displayStock();
+        displayTotalStock();
+        checkExpiringProducts();
+        alert('Produto excluído com sucesso!');
+    } catch (error) {
+        console.error('[Form] Erro ao excluir produto:', error);
+        alert(`Erro ao excluir produto: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function deleteLocation(locationId) {
+    if (!confirm('Tem certeza que deseja excluir esta localidade?')) {
+        return;
+    }
+    showLoading();
+    try {
+        const index = state.locationsData.findIndex(loc => loc.id === locationId);
+        const response = await fetch(`${CONFIG.API_BASE_URL}/api/locations/${locationId}?index=${index}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) {
+            throw new Error(`Erro ao excluir localidade: ${response.status} ${response.statusText}`);
+        }
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || 'Erro ao excluir localidade');
+        }
+        await loadLocations();
+        displayLocations();
+        alert('Localidade excluída com sucesso!');
+    } catch (error) {
+        console.error('[Form] Erro ao excluir localidade:', error);
+        alert(`Erro ao excluir localidade: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+// ==================== UTILITÁRIOS ====================
+function showLoading() {
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('active');
+    }
+}
+
+function hideLoading() {
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.classList.remove('active');
+    }
+}
+
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function formatNumber(number) {
+    return Number.isFinite(number) ? number.toFixed(2).replace(/\.00$/, '') : '0';
+}
+
+function formatDate(dateStr) {
+    if (!dateStr || isNaN(new Date(dateStr))) return 'Sem validade';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function formatDateTime(dateStr) {
+    if (!dateStr || isNaN(new Date(dateStr))) return 'Data inválida';
+    const date = new Date(dateStr);
+    return date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
