@@ -973,4 +973,54 @@ body {
         box-shadow: none;
         border: 1px solid #ddd;
     }
+	
+	.product-group {
+    margin-bottom: 2rem;
+}
+
+.total-stock-header {
+    background: var(--background-light);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.total-stock-header.low-stock {
+    background: var(--warning-light);
+    border-left: 4px solid var(--warning);
+}
+
+.total-stock-header h4 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.total-stock-header p {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+
+.product-group-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+.product-actions.horizontal {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-start;
+    margin-top: 1rem;
+}
+
+.product-actions.horizontal .btn-action {
+    flex: 0 0 auto;
+    padding: 0.5rem 1rem;
+}
 }

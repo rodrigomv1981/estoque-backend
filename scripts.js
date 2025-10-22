@@ -174,10 +174,8 @@ function displayStock() {
         alert('Erro na interface: elemento de estoque não encontrado. Contate o suporte.');
         return;
     }
-    const start = (state.currentPage - 1) * CONFIG.ITEMS_PER_PAGE;
-    const end = start + CONFIG.ITEMS_PER_PAGE;
-    const paginated = sortByExpirationDate(state.filteredStockData).slice(start, end);
-    if (paginated.length === 0) {
+    const grouped = groupByProduct(state.filteredStockData);
+    if (grouped.length === 0) {
         stockList.innerHTML = `
             <div class="empty-state">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -189,44 +187,37 @@ function displayStock() {
             </div>
         `;
     } else {
-        stockList.innerHTML = paginated.map(item => createProductCard(item)).join('');
+        const start = (state.currentPage - 1) * CONFIG.ITEMS_PER_PAGE;
+        const end = start + CONFIG.ITEMS_PER_PAGE;
+        let paginatedItems = [];
+        grouped.forEach(group => {
+            const sortedItems = sortByExpirationDate(group.items);
+            paginatedItems = paginatedItems.concat(sortedItems);
+        });
+        paginatedItems = paginatedItems.slice(start, end);
+        const groupedPaginated = groupByProduct(paginatedItems);
+        stockList.innerHTML = groupedPaginated.map(group => `
+            <div class="product-group">
+                <div class="total-stock-header ${group.totalQuantity <= group.minimumStock && group.minimumStock > 0 ? 'low-stock' : ''}">
+                    <h4>${escapeHtml(group.product)}</h4>
+                    <p>Total: ${formatNumber(group.totalQuantity)} ${escapeHtml(group.unit)}</p>
+                    <p>Estoque Mínimo: ${formatNumber(group.minimumStock)} ${escapeHtml(group.unit)}</p>
+                </div>
+                <div class="product-group-items">
+                    ${group.items.map(item => createProductCard(item)).join('')}
+                </div>
+            </div>
+        `).join('');
     }
     updatePagination(state.filteredStockData.length);
-}
-
-function displayTotalStock() {
-    const totalStockList = document.getElementById('totalStockList');
-    if (!totalStockList) {
-        console.error('[UI] Elemento totalStockList não encontrado no DOM');
-        return;
-    }
-    const grouped = groupByProduct(state.filteredStockData);
-    if (grouped.length === 0) {
-        totalStockList.innerHTML = `
-            <div class="empty-state">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                </svg>
-                <h3>Nenhum produto encontrado</h3>
-                <p>Adicione produtos ao estoque para ver os totais.</p>
-            </div>
-        `;
-        return;
-    }
-    totalStockList.innerHTML = grouped.map(group => `
-        <div class="total-stock-card ${group.totalQuantity <= group.minimumStock && group.minimumStock > 0 ? 'low-stock' : ''}">
-            <h4>${escapeHtml(group.product)}</h4>
-            <p>Total: ${formatNumber(group.totalQuantity)} ${escapeHtml(group.unit)}</p>
-            <p>Estoque Mínimo: ${formatNumber(group.minimumStock)} ${escapeHtml(group.unit)}</p>
-        </div>
-    `).join('');
 }
 
 function createProductCard(item) {
     const expiryStatus = getExpiryStatus(item.expirationDate);
     const expiryBadge = getExpiryBadge(item.expirationDate);
     const isLowStock = item.quantity <= item.minimumStock && item.minimumStock > 0;
+    const location = state.locationsData.find(loc => loc.id === item.location);
+    const locationName = location ? `${location.room}${location.cabinet ? ' - ' + location.cabinet : ''}` : 'Não definida';
     return `
         <div class="product-card ${expiryStatus.class} ${isLowStock ? 'low-stock' : ''}" data-id="${item.id}">
             <div class="product-header">
@@ -253,7 +244,7 @@ function createProductCard(item) {
                 </div>
                 <div class="info-row">
                     <span class="info-label">Localização</span>
-                    <span class="info-value">${escapeHtml(item.location || 'Não definida')}</span>
+                    <span class="info-value">${escapeHtml(locationName)}</span>
                 </div>
                 ${item.packaging ? `
                 <div class="info-row">
@@ -268,7 +259,7 @@ function createProductCard(item) {
                 </div>
                 ` : ''}
             </div>
-            <div class="product-actions">
+            <div class="product-actions horizontal">
                 <button class="btn-action edit" data-id="${item.id}" aria-label="Editar produto ${escapeHtml(item.product)}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -957,13 +948,16 @@ async function exhaustProduct(productId) {
         }
         const updatedProduct = { ...product, quantity: 0 };
         const index = state.stockData.findIndex(p => p.id === productId);
+        console.log('[exhaustProduct] Enviando atualização:', { productId, index, updatedProduct });
         const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updatedProduct)
         });
+        console.log('[exhaustProduct] Resposta do servidor:', response.status, response.statusText);
         if (!response.ok) {
-            throw new Error(`Erro ao esgotar produto: ${response.status} ${response.statusText}`);
+            const errorText = await response.text();
+            throw new Error(`Erro ao esgotar produto: ${response.status} ${response.statusText} - ${errorText}`);
         }
         const result = await response.json();
         if (!result.success) {
@@ -972,7 +966,6 @@ async function exhaustProduct(productId) {
         await loadStock();
         applyFilters();
         displayStock();
-        displayTotalStock();
         checkExpiringProducts();
         alert(`Produto ${product.product} esgotado com sucesso!`);
     } catch (error) {
@@ -1068,7 +1061,7 @@ function escapeHtml(unsafe) {
 }
 
 function formatNumber(number) {
-    return Number.isFinite(number) ? number.toFixed(2).replace(/\.00$/, '') : '0';
+    return Number.isFinite(number) ? number.toFixed(2) : '0.00';
 }
 
 function formatDate(dateStr) {

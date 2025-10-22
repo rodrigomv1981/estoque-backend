@@ -177,56 +177,73 @@ app.post('/api/stock', async (req, res) => {
 });
 
 // Rota para atualizar produto
+// Rota para atualizar um produto
 app.put('/api/stock/:id', async (req, res) => {
     try {
-        const product = req.body;
+        const { id } = req.params;
         const index = parseInt(req.query.index);
-        if (isNaN(index)) {
-            return res.status(400).json({ success: false, error: 'Índice da linha inválido' });
-        }
+        const product = req.body;
+
+        console.log(`[API] Atualizando produto ID: ${id}, Index: ${index}`);
+
+        // Validar campos obrigatórios
         if (!product.product || !product.batch || !product.quantity || !product.unit || !product.location || !product.status) {
+            console.warn('[API] Campos obrigatórios ausentes:', product);
             return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes' });
         }
 
-        const values = [
+        // Validar tipos de dados
+        if (isNaN(product.quantity) || product.quantity < 0) {
+            console.warn('[API] Quantidade inválida:', product.quantity);
+            return res.status(400).json({ success: false, error: 'Quantidade inválida' });
+        }
+        if (product.expirationDate && isNaN(new Date(product.expirationDate))) {
+            console.warn('[API] Data de validade inválida:', product.expirationDate);
+            return res.status(400).json({ success: false, error: 'Data de validade inválida' });
+        }
+        if (product.packagingNumber && (isNaN(product.packagingNumber) || product.packagingNumber < 1)) {
+            console.warn('[API] Número de embalagens inválido:', product.packagingNumber);
+            return res.status(400).json({ success: false, error: 'Número de embalagens inválido' });
+        }
+
+        // Buscar dados atuais
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'Estoque!A2:M'
+        });
+        const values = response.data.values || [];
+
+        if (isNaN(index) || index < 0 || index >= values.length) {
+            console.warn('[API] Índice inválido:', index);
+            return res.status(400).json({ success: false, error: 'Índice inválido' });
+        }
+
+        // Atualizar linha
+        values[index] = [
             product.id,
             product.product,
-            product.manufacturer,
+            product.manufacturer || '',
             product.batch,
-            product.quantity,
+            product.quantity.toString(),
             product.unit,
-            product.packaging,
-            product.packagingNumber,
-            product.minimumStock,
-            product.invoice,
-            product.expirationDate,
+            product.packaging || '',
+            product.packagingNumber.toString(),
+            product.minimumStock.toString(),
+            product.invoice || '',
+            product.expirationDate || '',
             product.location,
             product.status
         ];
 
-        const response = await sheets.spreadsheets.values.update({
+        // Salvar no Google Sheets
+        await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
             range: `Estoque!A${index + 2}:M${index + 2}`,
             valueInputOption: 'RAW',
-            resource: { values: [values] }
+            resource: { values: [values[index]] }
         });
 
-        // Registrar log
-        await sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_ID,
-            range: 'Logs!A:D',
-            valueInputOption: 'RAW',
-            resource: {
-                values: [[
-                    `log_${Date.now()}`,
-                    'Editar Produto',
-                    `${product.product} (Lote: ${product.batch})`,
-                    new Date().toISOString()
-                ]]
-            }
-        });
-
-        console.log(`[API] Produto atualizado: ${product.product} (Lote: ${product.batch})`);
+        console.log(`[API] Produto atualizado com sucesso: ${id}`);
         res.json({ success: true, data: product });
     } catch (error) {
         console.error('[API] Erro ao atualizar produto:', error);
