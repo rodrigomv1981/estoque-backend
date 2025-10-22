@@ -1,6 +1,6 @@
 // ==================== CONFIGURAÇÕES ====================
 const CONFIG = {
-    API_BASE_URL: 'https://estoque-backend-zfgj.onrender.com', // Substitua pela URL do seu serviço no Render
+    API_BASE_URL: 'https://estoque-backend-zfgj.onrender.com',
     ITEMS_PER_PAGE: 12,
     EXPIRING_DAYS_WARNING: 30,
     EXPIRING_DAYS_CRITICAL: 7
@@ -123,8 +123,9 @@ async function loadLogs() {
             throw new Error('Resposta do servidor em formato inválido');
         }
         
-        console.log('[Data] Logs carregados:', result.data.length, 'itens');
-        return Array.isArray(result.data) ? result.data : [];
+        const logs = Array.isArray(result.data) ? result.data : [];
+        console.log('[Data] Logs carregados:', logs.length, 'itens');
+        return logs;
     } catch (error) {
         console.error('[Data] Erro ao carregar logs:', error);
         return [];
@@ -138,9 +139,9 @@ function applyFilters() {
     if (state.searchQuery) {
         const query = state.searchQuery.toLowerCase();
         filtered = filtered.filter(item => 
-            (item.product && item.product.toLowerCase().includes(query)) ||
-            (item.batch && item.batch.toLowerCase().includes(query)) ||
-            (item.manufacturer && item.manufacturer.toLowerCase().includes(query))
+            item.product.toLowerCase().includes(query) ||
+            item.batch.toLowerCase().includes(query) ||
+            item.manufacturer.toLowerCase().includes(query)
         );
     }
     
@@ -156,11 +157,6 @@ function groupByProductAndBatch(data) {
     const grouped = {};
     
     data.forEach(item => {
-        if (!item.product || !item.batch) {
-            console.warn('[Data] Item com product ou batch inválido:', item);
-            return;
-        }
-        
         const key = `${item.product}_${item.batch}`;
         
         if (!grouped[key]) {
@@ -171,7 +167,7 @@ function groupByProductAndBatch(data) {
             };
         }
         
-        grouped[key].totalQuantity += item.quantity || 0;
+        grouped[key].totalQuantity += item.quantity;
         grouped[key].items.push(item);
         
         if (!grouped[key].expirationDate || 
@@ -280,6 +276,18 @@ function createProductCard(group) {
                     <span class="info-value" style="color: var(--info);">Mín: ${formatNumber(group.minimumStock)} ${escapeHtml(group.unit)}</span>
                 </div>
                 ` : ''}
+                
+                <!-- Subdivisão de Saldo Total e Estoque Mínimo -->
+                <div class="stock-summary">
+                    <div class="summary-item">
+                        <span class="summary-label">Saldo Total</span>
+                        <span class="summary-value">${formatNumber(group.totalQuantity)} ${escapeHtml(group.unit)}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Estoque Mín.</span>
+                        <span class="summary-value">${formatNumber(group.minimumStock)} ${escapeHtml(group.unit)}</span>
+                    </div>
+                </div>
             </div>
             
             <div class="product-actions">
@@ -296,6 +304,28 @@ function createProductCard(group) {
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     </svg>
                     Excluir
+                </button>
+                <button class="btn-action exhaust" onclick="exhaustProduct('${group.items[0].id}')" aria-label="Esgotar produto ${escapeHtml(group.product)}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="16"></line>
+                        <line x1="8" y1="12" x2="16" y2="12"></line>
+                    </svg>
+                    Esgotar
+                </button>
+                <button class="btn-action use" onclick="openUseModal('${group.items[0].id}')" aria-label="Usar produto ${escapeHtml(group.product)}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"></path>
+                        <path d="M12 6v6l4 2"></path>
+                    </svg>
+                    Usar
+                </button>
+                <button class="btn-action transfer" onclick="openTransferModal('${group.items[0].id}')" aria-label="Transferir produto ${escapeHtml(group.product)}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 5v14"></path>
+                        <path d="M19 12l-7 7-7-7"></path>
+                    </svg>
+                    Transferir
                 </button>
             </div>
         </div>
@@ -348,28 +378,20 @@ function checkExpiringProducts() {
     const message = document.getElementById('expiringMessage');
     
     if (!alert || !message) {
-        console.error('[UI] Elementos expiringAlert ou expiringMessage não encontrados');
+        console.error('[UI] Elementos de alerta de validade não encontrados');
         return;
     }
     
     const today = new Date();
-    const expiring = state.stockData.filter(item => {
+    const expiringProducts = state.stockData.filter(item => {
         if (!item.expirationDate || isNaN(new Date(item.expirationDate))) return false;
         const expiry = new Date(item.expirationDate);
         const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-        return daysUntilExpiry >= 0 && daysUntilExpiry <= CONFIG.EXPIRING_DAYS_WARNING;
+        return daysUntilExpiry <= CONFIG.EXPIRING_DAYS_WARNING && daysUntilExpiry >= 0;
     });
     
-    if (expiring.length > 0) {
-        expiring.sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
-        
-        const nearestExpiring = expiring[0];
-        const daysUntilExpiry = Math.ceil((new Date(nearestExpiring.expirationDate) - today) / (1000 * 60 * 60 * 24));
-        
-        message.innerHTML = `
-            ${expiring.length} produto(s) próximo(s) ao vencimento. 
-            <strong>${escapeHtml(nearestExpiring.product)}</strong> vence em ${daysUntilExpiry} dia(s).
-        `;
+    if (expiringProducts.length > 0) {
+        message.innerHTML = `${expiringProducts.length} produto(s) próximo(s) ao vencimento. Verifique o estoque!`;
         alert.style.display = 'flex';
     } else {
         alert.style.display = 'none';
@@ -381,20 +403,6 @@ function displayLocations() {
     if (!locationsList) {
         console.error('[UI] Elemento locationsList não encontrado no DOM');
         alert('Erro na interface: elemento de localidades não encontrado. Contate o suporte.');
-        return;
-    }
-    
-    if (state.locationsData.length === 0) {
-        locationsList.innerHTML = `
-            <div class="empty-state">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                    <circle cx="12" cy="10" r="3"></circle>
-                </svg>
-                <h3>Nenhuma localidade cadastrada</h3>
-                <p>Adicione localidades para organizar seu estoque.</p>
-            </div>
-        `;
         return;
     }
     
@@ -603,6 +611,51 @@ function closeLocationModal() {
     }
 }
 
+// ==================== MODAIS DE AÇÕES ====================
+function openUseModal(productId) {
+    const product = state.stockData.find(p => p.id === productId);
+    if (!product) {
+        alert('Produto não encontrado.');
+        return;
+    }
+    
+    const quantity = prompt(`Quantos ${product.unit} deseja usar de "${product.product}" (Lote: ${product.batch})?\n\nQuantidade disponível: ${product.quantity} ${product.unit}`);
+    
+    if (quantity === null) return;
+    
+    const quantityToUse = parseFloat(quantity);
+    if (isNaN(quantityToUse) || quantityToUse <= 0) {
+        alert('Quantidade inválida.');
+        return;
+    }
+    
+    if (quantityToUse > product.quantity) {
+        alert(`Quantidade insuficiente. Disponível: ${product.quantity} ${product.unit}`);
+        return;
+    }
+    
+    useProduct(productId, quantityToUse);
+}
+
+function openTransferModal(productId) {
+    const product = state.stockData.find(p => p.id === productId);
+    if (!product) {
+        alert('Produto não encontrado.');
+        return;
+    }
+    
+    if (product.packagingNumber <= 1) {
+        alert('Este produto tem apenas uma embalagem. Não é possível transferir.');
+        return;
+    }
+    
+    const newLocation = prompt(`Selecione a nova localização para transferir uma unidade de "${product.product}" (Lote: ${product.batch}):\n\nLocalidades disponíveis:\n${state.locationsData.map(l => `- ${l.room} - ${l.cabinet || 'Sem armário'}`).join('\n')}`);
+    
+    if (newLocation === null) return;
+    
+    transferProduct(productId, newLocation);
+}
+
 function populateLocationDropdown() {
     const select = document.getElementById('location');
     if (!select) {
@@ -641,6 +694,7 @@ async function saveProduct(event) {
             status: document.getElementById('status').value
         };
         
+        // Validação: Nota Fiscal é opcional, mas outros campos são obrigatórios
         if (!product.product || !product.batch || !product.quantity || !product.unit || !product.location || !product.status) {
             alert('Por favor, preencha todos os campos obrigatórios: Nome, Lote, Quantidade, Unidade, Localização e Status.');
             return;
@@ -711,6 +765,147 @@ async function deleteProduct(id) {
     } catch (error) {
         console.error('[CRUD] Erro ao excluir produto:', error);
         alert(`Erro ao excluir produto: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+// ==================== FUNÇÕES DE AÇÃO ====================
+async function exhaustProduct(id) {
+    if (!confirm('Tem certeza que deseja esgotar este produto (zerar o saldo)?')) {
+        return;
+    }
+    
+    showLoading();
+    
+    try {
+        const product = state.stockData.find(p => p.id === id);
+        if (!product) {
+            throw new Error('Produto não encontrado');
+        }
+        
+        const updatedProduct = { ...product, quantity: 0 };
+        const index = state.stockData.findIndex(p => p.id === id);
+        
+        const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${id}?index=${index}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedProduct)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Erro ao esgotar produto');
+        }
+        
+        await loadStock();
+        applyFilters();
+        displayStock();
+        checkExpiringProducts();
+        alert('Produto esgotado com sucesso!');
+    } catch (error) {
+        console.error('[Action] Erro ao esgotar produto:', error);
+        alert(`Erro ao esgotar produto: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function useProduct(id, quantityToUse) {
+    showLoading();
+    
+    try {
+        const product = state.stockData.find(p => p.id === id);
+        if (!product) {
+            throw new Error('Produto não encontrado');
+        }
+        
+        const newQuantity = product.quantity - quantityToUse;
+        const updatedProduct = { ...product, quantity: newQuantity };
+        const index = state.stockData.findIndex(p => p.id === id);
+        
+        const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${id}?index=${index}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedProduct)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Erro ao usar produto');
+        }
+        
+        await loadStock();
+        applyFilters();
+        displayStock();
+        checkExpiringProducts();
+        alert(`${quantityToUse} ${product.unit} utilizado(s) com sucesso!`);
+    } catch (error) {
+        console.error('[Action] Erro ao usar produto:', error);
+        alert(`Erro ao usar produto: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function transferProduct(id, newLocation) {
+    showLoading();
+    
+    try {
+        const product = state.stockData.find(p => p.id === id);
+        if (!product) {
+            throw new Error('Produto não encontrado');
+        }
+        
+        // Criar novo produto com a localização transferida
+        const newProduct = {
+            ...product,
+            id: `prod_${Date.now()}`,
+            location: newLocation,
+            packagingNumber: 1,
+            quantity: product.quantity / product.packagingNumber
+        };
+        
+        // Atualizar o produto original reduzindo a quantidade de embalagens
+        const updatedProduct = {
+            ...product,
+            packagingNumber: product.packagingNumber - 1,
+            quantity: product.quantity - newProduct.quantity
+        };
+        
+        // Adicionar novo produto
+        const addResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newProduct)
+        });
+        
+        if (!addResponse.ok) {
+            const errorData = await addResponse.json();
+            throw new Error(errorData.error || 'Erro ao transferir produto');
+        }
+        
+        // Atualizar produto original
+        const index = state.stockData.findIndex(p => p.id === id);
+        const updateResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${id}?index=${index}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedProduct)
+        });
+        
+        if (!updateResponse.ok) {
+            const errorData = await updateResponse.json();
+            throw new Error(errorData.error || 'Erro ao atualizar produto original');
+        }
+        
+        await loadStock();
+        applyFilters();
+        displayStock();
+        checkExpiringProducts();
+        alert('Produto transferido com sucesso!');
+    } catch (error) {
+        console.error('[Action] Erro ao transferir produto:', error);
+        alert(`Erro ao transferir produto: ${error.message}`);
     } finally {
         hideLoading();
     }
@@ -910,3 +1105,4 @@ function initializeEventListeners() {
     
     console.log('[Events] Event listeners inicializados');
 }
+
