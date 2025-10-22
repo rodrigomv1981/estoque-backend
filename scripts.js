@@ -43,7 +43,6 @@ async function loadAllData() {
         ]);
         applyFilters();
         displayStock();
-        displayTotalStock();
         displayLocations();
         displayLogs();
         checkExpiringProducts();
@@ -655,13 +654,11 @@ function initializeEventListeners() {
         state.searchQuery = e.target.value;
         applyFilters();
         displayStock();
-        displayTotalStock();
     });
     document.getElementById('statusFilter')?.addEventListener('change', (e) => {
         state.statusFilter = e.target.value;
         applyFilters();
         displayStock();
-        displayTotalStock();
     });
 
     // Modais
@@ -773,7 +770,6 @@ async function handleProductSubmit(e) {
         await loadStock();
         applyFilters();
         displayStock();
-        displayTotalStock();
         checkExpiringProducts();
         closeProductModal();
         alert(productId ? 'Produto atualizado com sucesso!' : 'Produto adicionado com sucesso!');
@@ -862,7 +858,6 @@ async function handleUseProductSubmit(e) {
         await loadStock();
         applyFilters();
         displayStock();
-        displayTotalStock();
         checkExpiringProducts();
         closeUseProductModal();
         alert(`Produto ${product.product} usado com sucesso!`);
@@ -924,7 +919,6 @@ async function handleTransferProductSubmit(e) {
         await loadStock();
         applyFilters();
         displayStock();
-        displayTotalStock();
         checkExpiringProducts();
         closeTransferProductModal();
         alert(`Produto ${product.product} transferido com sucesso!`);
@@ -996,7 +990,6 @@ async function deleteProduct(productId) {
         await loadStock();
         applyFilters();
         displayStock();
-        displayTotalStock();
         checkExpiringProducts();
         alert('Produto excluído com sucesso!');
     } catch (error) {
