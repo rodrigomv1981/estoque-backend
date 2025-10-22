@@ -185,8 +185,8 @@ function initializeEventListeners() {
 
     // Abrir modal de produto
     document.getElementById('addProductBtn').addEventListener('click', () => openProductModal());
-    document.getElementById('closeProductModal').addEventListener('click', closeProductModal);
-    document.getElementById('cancelProductBtn').addEventListener('click', closeProductModal);
+    document.getElementById('closeModal').addEventListener('click', closeProductModal);
+    document.getElementById('cancelBtn').addEventListener('click', closeProductModal);
     document.getElementById('productModal').querySelector('.modal-overlay').addEventListener('click', closeProductModal);
 
     // Submeter formulário de produto
@@ -204,9 +204,9 @@ function initializeEventListeners() {
             minimumStock: parseFloat(document.getElementById('minimumStock').value),
             invoice: document.getElementById('invoice').value, // Não obrigatório
             expirationDate: document.getElementById('expirationDate').value,
-            locationId: document.getElementById('locationSelect').value,
-            location: document.getElementById('locationSelect').options[document.getElementById('locationSelect').selectedIndex].textContent, // Salva o nome da localização
-            status: document.getElementById('statusSelect').value,
+            locationId: document.getElementById('location').value,
+            location: document.getElementById('location').options[document.getElementById('location').selectedIndex].textContent, // Salva o nome da localização
+            status: document.getElementById('status').value,
         };
 
         if (productId) {
@@ -678,8 +678,8 @@ const packagingNumberInput = document.getElementById('packagingNumber');
 const minimumStockInput = document.getElementById('minimumStock');
 const invoiceInput = document.getElementById('invoice');
 const expirationDateInput = document.getElementById('expirationDate');
-const locationSelect = document.getElementById('locationSelect');
-const statusSelect = document.getElementById('statusSelect');
+const locationSelect = document.getElementById('location');
+const statusSelect = document.getElementById('status');
 
 const locationModal = document.getElementById('locationModal');
 const locationForm = document.getElementById('locationForm');
@@ -715,6 +715,7 @@ async function openProductModal(product = null) {
         packagingNumberInput.value = 1;
         minimumStockInput.value = 0;
         statusSelect.value = 'disponivel';
+        locationSelect.value = ''; // Reset location select
     }
     productModal.classList.add('active');
 }
@@ -742,7 +743,7 @@ function closeLocationModal() {
 }
 
 function populateLocationDropdown() {
-    const locationSelectElement = document.getElementById('locationSelect');
+    const locationSelectElement = document.getElementById('location');
     if (!locationSelectElement) return;
 
     locationSelectElement.innerHTML = '<option value="">Selecione uma localização</option>';
@@ -769,9 +770,9 @@ async function saveProduct(e) {
         minimumStock: parseFloat(document.getElementById('minimumStock').value),
         invoice: document.getElementById('invoice').value, 
         expirationDate: document.getElementById('expirationDate').value,
-        locationId: document.getElementById('locationSelect').value,
-        location: document.getElementById('locationSelect').options[document.getElementById('locationSelect').selectedIndex].textContent, 
-        status: document.getElementById('statusSelect').value,
+        locationId: document.getElementById('location').value,
+        location: document.getElementById('location').options[document.getElementById('location').selectedIndex].textContent, 
+        status: document.getElementById('status').value,
     };
 
     if (productId) {
