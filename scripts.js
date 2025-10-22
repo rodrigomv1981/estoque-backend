@@ -1054,7 +1054,7 @@ function escapeHtml(unsafe) {
 }
 
 function formatNumber(number) {
-    return Number.isFinite(number) ? number.toFixed(2) : '0.00';
+    return Number.isFinite(number) ? number.toFixed(2) : '0,00';
 }
 
 function formatDate(dateStr) {
