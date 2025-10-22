@@ -239,9 +239,15 @@ function populateFilters() {
 }
 
 function getLocationName(locationId) {
-    if (!locationId) return 'Não definida';
+    if (!locationId) {
+        console.warn('[getLocationName] ID de localização ausente');
+        return 'Localização não especificada';
+    }
     const location = state.locationsData.find(loc => loc.id === locationId);
-    if (!location) return 'Não definida';
+    if (!location) {
+        console.warn('[getLocationName] Localização não encontrada para ID:', locationId);
+        return 'Localização inválida';
+    }
     return escapeHtml(location.cabinet ? `${location.room} - ${location.cabinet}` : location.room);
 }
 
@@ -962,8 +968,10 @@ async function exhaustProduct(productId) {
     try {
         const product = state.stockData.find(p => p.id === productId);
         if (!product) {
+            console.error('[exhaustProduct] Produto não encontrado:', productId);
             throw new Error('Produto não encontrado.');
         }
+        console.log('[exhaustProduct] Produto encontrado:', product);
         // Validar campos obrigatórios
         const missingFields = [];
         if (!product.product) missingFields.push('product');
@@ -992,6 +1000,10 @@ async function exhaustProduct(productId) {
             expirationDate: product.expirationDate || ''
         };
         const index = state.stockData.findIndex(p => p.id === productId);
+        if (index === -1) {
+            console.error('[exhaustProduct] Índice não encontrado para produto:', productId);
+            throw new Error('Índice do produto não encontrado.');
+        }
         console.log('[exhaustProduct] Enviando atualização:', { productId, index, updatedProduct });
         const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
             method: 'PUT',
@@ -1007,6 +1019,20 @@ async function exhaustProduct(productId) {
         if (!result.success) {
             throw new Error(result.error || 'Erro ao esgotar produto');
         }
+        // Registrar log no frontend (opcional, já que o backend também registra)
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'Logs!A:D',
+            valueInputOption: 'RAW',
+            resource: {
+                values: [[
+                    `log_${Date.now()}`,
+                    'Esgotar Produto',
+                    `${product.product} (Lote: ${product.batch})`,
+                    new Date().toISOString()
+                ]]
+            }
+        });
         await loadStock();
         applyFilters();
         displayStock();
@@ -1026,6 +1052,10 @@ async function deleteProduct(productId) {
     showLoading();
     try {
         const index = state.stockData.findIndex(p => p.id === productId);
+        if (index === -1) {
+            console.error('[deleteProduct] Índice não encontrado para produto:', productId);
+            throw new Error('Índice do produto não encontrado.');
+        }
         const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
             method: 'DELETE'
         });
@@ -1055,6 +1085,10 @@ async function deleteLocation(locationId) {
     showLoading();
     try {
         const index = state.locationsData.findIndex(loc => loc.id === locationId);
+        if (index === -1) {
+            console.error('[deleteLocation] Índice não encontrado para localidade:', locationId);
+            throw new Error('Índice da localidade não encontrado.');
+        }
         const response = await fetch(`${CONFIG.API_BASE_URL}/api/locations/${locationId}?index=${index}`, {
             method: 'DELETE'
         });

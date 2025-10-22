@@ -26,7 +26,7 @@ app.get('/health', (req, res) => {
     res.json({ status: 'OK', message: 'Servidor está funcionando' });
 });
 
-// Rota para carregar dados de estoque
+// Função para normalizar datas
 function normalizeDate(dateStr) {
     if (!dateStr) return '';
     const regex = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/;
@@ -38,6 +38,7 @@ function normalizeDate(dateStr) {
     return isNaN(new Date(dateStr)) ? '' : dateStr;
 }
 
+// Rota para carregar dados de estoque
 app.get('/api/stock', async (req, res) => {
     try {
         console.log('[API] Carregando dados de estoque...');
@@ -50,6 +51,7 @@ app.get('/api/stock', async (req, res) => {
         const stockData = values.map((row, index) => {
             const quantityStr = row[4] ? row[4].toString().replace(',', '.') : '0';
             const minimumStockStr = row[8] ? row[8].toString().replace(',', '.') : '0';
+            const location = row[11] || 'loc_default'; // Alteração: Definir localização padrão se vazia
 
             const item = {
                 id: row[0] || `temp_${Date.now()}_${index}`,
@@ -63,16 +65,19 @@ app.get('/api/stock', async (req, res) => {
                 minimumStock: parseFloat(minimumStockStr) || 0,
                 invoice: row[9] || '',
                 expirationDate: normalizeDate(row[10]),
-                location: row[11] || '',
+                location: location,
                 status: row[12] || 'disponivel'
             };
 
             if (!item.product || !item.batch) {
-                console.warn(`[API] Item inválido na linha ${index + 2}: product ou batch ausente`);
+                console.warn(`[API] Item inválido na linha ${index + 2}: product ou batch ausente`, item);
             }
             if (item.expirationDate && isNaN(new Date(item.expirationDate))) {
                 console.warn(`[API] Data de validade inválida na linha ${index + 2}: ${item.expirationDate}`);
                 item.expirationDate = '';
+            }
+            if (!item.location) {
+                console.warn(`[API] Localização ausente na linha ${index + 2}, usando padrão: loc_default`);
             }
 
             return item;
@@ -98,7 +103,7 @@ app.get('/api/locations', async (req, res) => {
         const values = response.data.values || [];
         const locationsData = values.map((row, index) => ({
             id: row[0] || `temp_${Date.now()}_${index}`,
-            room: row[1] || '',
+            room: row[1] || 'Sala Desconhecida',
             cabinet: row[2] || ''
         }));
 
@@ -140,21 +145,22 @@ app.post('/api/stock', async (req, res) => {
     try {
         const product = req.body;
         if (!product.product || !product.batch || !product.quantity || !product.unit || !product.location || !product.status) {
+            console.warn('[API] Campos obrigatórios ausentes:', product);
             return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes' });
         }
 
         const values = [
             product.id,
             product.product,
-            product.manufacturer,
+            product.manufacturer || '',
             product.batch,
-            product.quantity,
+            product.quantity.toString(),
             product.unit,
-            product.packaging,
-            product.packagingNumber,
-            product.minimumStock,
-            product.invoice,
-            product.expirationDate,
+            product.packaging || '',
+            product.packagingNumber.toString(),
+            product.minimumStock.toString(),
+            product.invoice || '',
+            product.expirationDate || '',
             product.location,
             product.status
         ];
@@ -190,17 +196,16 @@ app.post('/api/stock', async (req, res) => {
 });
 
 // Rota para atualizar produto
-// Rota para atualizar um produto
 app.put('/api/stock/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const index = parseInt(req.query.index);
         const product = req.body;
 
-        console.log(`[API] Atualizando produto ID: ${id}, Index: ${index}`);
+        console.log(`[API] Atualizando produto ID: ${id}, Index: ${index}, Dados:`, product);
 
         // Validar campos obrigatórios
-        if (!product.product || !product.batch || !product.quantity || !product.unit || !product.location || !product.status) {
+        if (!product.product || !product.batch || product.quantity === undefined || product.quantity === null || !product.unit || !product.location || !product.status) {
             console.warn('[API] Campos obrigatórios ausentes:', product);
             return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes' });
         }
@@ -244,7 +249,7 @@ app.put('/api/stock/:id', async (req, res) => {
             product.minimumStock.toString(),
             product.invoice || '',
             product.expirationDate || '',
-            product.location,
+            product.location || 'loc_default', // Alteração: Garantir localização padrão
             product.status
         ];
 
@@ -255,6 +260,23 @@ app.put('/api/stock/:id', async (req, res) => {
             valueInputOption: 'RAW',
             resource: { values: [values[index]] }
         });
+
+        // Registrar log para ação de esgotar (quantidade = 0)
+        if (product.quantity === 0) {
+            await sheets.spreadsheets.values.append({
+                spreadsheetId: SPREADSHEET_ID,
+                range: 'Logs!A:D',
+                valueInputOption: 'RAW',
+                resource: {
+                    values: [[
+                        `log_${Date.now()}`,
+                        'Esgotar Produto',
+                        `${product.product} (Lote: ${product.batch})`,
+                        new Date().toISOString()
+                    ]]
+                }
+            });
+        }
 
         console.log(`[API] Produto atualizado com sucesso: ${id}`);
         res.json({ success: true, data: product });
@@ -269,6 +291,7 @@ app.delete('/api/stock/:id', async (req, res) => {
     try {
         const index = parseInt(req.query.index);
         if (isNaN(index)) {
+            console.warn('[API] Índice da linha inválido:', index);
             return res.status(400).json({ success: false, error: 'Índice da linha inválido' });
         }
 
@@ -314,10 +337,11 @@ app.post('/api/locations', async (req, res) => {
     try {
         const location = req.body;
         if (!location.room) {
+            console.warn('[API] Campo sala é obrigatório:', location);
             return res.status(400).json({ success: false, error: 'Campo sala é obrigatório' });
         }
 
-        const values = [location.id, location.room, location.cabinet];
+        const values = [location.id, location.room, location.cabinet || ''];
 
         const response = await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
@@ -355,13 +379,15 @@ app.put('/api/locations/:id', async (req, res) => {
         const location = req.body;
         const index = parseInt(req.query.index);
         if (isNaN(index)) {
+            console.warn('[API] Índice da linha inválido:', index);
             return res.status(400).json({ success: false, error: 'Índice da linha inválido' });
         }
         if (!location.room) {
+            console.warn('[API] Campo sala é obrigatório:', location);
             return res.status(400).json({ success: false, error: 'Campo sala é obrigatório' });
         }
 
-        const values = [location.id, location.room, location.cabinet];
+        const values = [location.id, location.room, location.cabinet || ''];
 
         const response = await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
@@ -398,6 +424,7 @@ app.delete('/api/locations/:id', async (req, res) => {
     try {
         const index = parseInt(req.query.index);
         if (isNaN(index)) {
+            console.warn('[API] Índice da linha inválido:', index);
             return res.status(400).json({ success: false, error: 'Índice da linha inválido' });
         }
 
