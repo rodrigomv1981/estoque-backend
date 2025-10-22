@@ -9,7 +9,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
     <script type="module" src="scripts.js" defer></script>
 </head>
 <body>
@@ -22,14 +21,6 @@
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Global Summary Section -->
-        <section id="global-summary-section" class="global-summary-section">
-            <div class="section-header">
-                <h2 class="section-title">Resumo Geral do Estoque</h2>
-            </div>
-            <div id="globalSummary" class="global-summary-grid"></div>
-        </section>
-
         <!-- Estoque Section -->
         <section id="stock-section" class="tab-content active">
             <div class="section-header">
@@ -72,6 +63,12 @@
                 </select>
             </div>
 
+            <!-- Total por Produto -->
+            <div id="totalStock" class="total-stock">
+                <h3 class="section-title">Totais por Produto</h3>
+                <div id="totalStockList" class="total-stock-grid"></div>
+            </div>
+
             <!-- Lista de Produtos -->
             <div id="stockList" class="products-grid"></div>
 
@@ -89,7 +86,6 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="9 18 15 12 9 6"></polyline>
                     </svg>
-                    Próximo
                 </button>
             </div>
         </section>
@@ -161,12 +157,10 @@
             </div>
             <form id="productForm" class="modal-form">
                 <input type="hidden" id="productId">
-                
                 <div class="form-group">
                     <label for="productName">Produto *</label>
                     <input type="text" id="productName" required placeholder="Nome do produto">
                 </div>
-
                 <div class="form-row">
                     <div class="form-group">
                         <label for="manufacturer">Fabricante</label>
@@ -177,7 +171,6 @@
                         <input type="text" id="batch" required placeholder="Número do lote">
                     </div>
                 </div>
-
                 <div class="form-row">
                     <div class="form-group">
                         <label for="quantity">Quantidade *</label>
@@ -194,7 +187,6 @@
                         </select>
                     </div>
                 </div>
-
                 <div class="form-row">
                     <div class="form-group">
                         <label for="packaging">Embalagem</label>
@@ -205,7 +197,6 @@
                         <input type="number" id="packagingNumber" min="1" value="1">
                     </div>
                 </div>
-
                 <div class="form-row">
                     <div class="form-group">
                         <label for="minimumStock">Estoque Mínimo</label>
@@ -216,19 +207,16 @@
                         <input type="text" id="invoice" placeholder="Nº da NF">
                     </div>
                 </div>
-
                 <div class="form-group">
                     <label for="expirationDate">Data de Validade</label>
                     <input type="date" id="expirationDate">
                 </div>
-
                 <div class="form-group">
                     <label for="location">Localização *</label>
                     <select id="location" required>
                         <option value="">Selecione uma localização</option>
                     </select>
                 </div>
-
                 <div class="form-group">
                     <label for="status">Status *</label>
                     <select id="status" required>
@@ -236,7 +224,6 @@
                         <option value="indisponivel">Indisponível</option>
                     </select>
                 </div>
-
                 <div class="form-actions">
                     <button type="button" id="cancelBtn" class="btn-secondary">Cancelar</button>
                     <button type="submit" class="btn-primary">Salvar</button>
@@ -261,16 +248,72 @@
             <form id="locationForm" class="modal-form">
                 <input type="hidden" id="locationId">
                 <div class="form-group">
-                    <label for="room">Sala/Área *</label>
-                    <input type="text" id="room" required placeholder="Ex: Almoxarifado">
+                    <label for="room">Sala *</label>
+                    <input type="text" id="room" required placeholder="Ex: Laboratório A">
                 </div>
                 <div class="form-group">
-                    <label for="cabinet">Armário/Prateleira</label>
-                    <input type="text" id="cabinet" placeholder="Ex: A1, Prateleira 3">
+                    <label for="cabinet">Armário</label>
+                    <input type="text" id="cabinet" placeholder="Ex: Armário 01">
                 </div>
                 <div class="form-actions">
                     <button type="button" id="cancelLocationBtn" class="btn-secondary">Cancelar</button>
                     <button type="submit" class="btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Usar Produto -->
+    <div id="useProductModal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Usar Produto</h2>
+                <button id="closeUseModal" class="btn-close">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <form id="useProductForm" class="modal-form">
+                <input type="hidden" id="useProductId">
+                <div class="form-group">
+                    <label for="useQuantity">Quantidade a Usar *</label>
+                    <input type="number" id="useQuantity" step="0.01" min="0" required placeholder="0.00">
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancelUseBtn" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary">Usar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Transferir Produto -->
+    <div id="transferProductModal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Transferir Produto</h2>
+                <button id="closeTransferModal" class="btn-close">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <form id="transferProductForm" class="modal-form">
+                <input type="hidden" id="transferProductId">
+                <div class="form-group">
+                    <label for="transferLocation">Nova Localização *</label>
+                    <select id="transferLocation" required>
+                        <option value="">Selecione uma localização</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancelTransferBtn" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary">Transferir</button>
                 </div>
             </form>
         </div>
