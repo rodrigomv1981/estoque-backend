@@ -172,7 +172,7 @@ app.post('/api/stock', async (req, res) => {
             product.expirationDate || '',
             product.location,
             product.status,
-            product.packageType // Novo campo
+            product.packageType || '' // Novo campo
         ];
 
         const response = await sheets.spreadsheets.values.append({

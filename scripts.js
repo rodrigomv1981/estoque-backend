@@ -967,7 +967,7 @@ async function handleTransferProductSubmit(e) {
                 ...existingProduct,
                 packagingNumber: existingProduct.packagingNumber + 1,
                 quantity: existingProduct.quantity + product.quantity,
-		        packageType: product.packageType // Manter o mesmo tipo de embalagem
+                packageType: product.packageType || 'Frasco plástico' // Inclui packageType
             };
             const existingIndex = state.stockData.findIndex(p => p.id === existingProduct.id);
             const updateExistingResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${existingProduct.id}?index=${existingIndex}`, {
@@ -985,8 +985,7 @@ async function handleTransferProductSubmit(e) {
                 id: await generateFrontendSequentialId('prod_'),
                 packagingNumber: 1,
                 location: newLocationId,
-		        packageType: product.packageType // Incluir tipo de embalagem
-
+                packageType: product.packageType || 'Frasco plástico' // Inclui packageType
             };
             const addResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock`, {
                 method: 'POST',
@@ -1000,7 +999,8 @@ async function handleTransferProductSubmit(e) {
         // Atualizar produto original (reduzir embalagens)
         const updatedProduct = {
             ...product,
-            packagingNumber: product.packagingNumber - 1
+            packagingNumber: product.packagingNumber - 1,
+            packageType: product.packageType || 'Frasco plástico' // Inclui packageType
         };
         const index = state.stockData.findIndex(p => p.id === productId);
         const updateResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
@@ -1055,6 +1055,7 @@ async function exhaustProduct(productId) {
         if (!product.unit) missingFields.push('unit');
         if (!product.location) missingFields.push('location');
         if (!product.status) missingFields.push('status');
+		if (!product.packageType) missingFields.push('packageType'); // Adicionada validação
         if (missingFields.length > 0) {
             console.error('[exhaustProduct] Campos obrigatórios ausentes:', missingFields, 'Produto:', product);
             throw new Error(`Produto com dados incompletos. Campos ausentes: ${missingFields.join(', ')}.`);
@@ -1072,7 +1073,8 @@ async function exhaustProduct(productId) {
             packagingNumber: product.packagingNumber || 1,
             minimumStock: product.minimumStock || 0,
             invoice: product.invoice || '',
-            expirationDate: product.expirationDate || ''
+            expirationDate: product.expirationDate || '',
+            packageType: product.packageType || 'Frasco plástico' // Inclui packageType com padrão
         };
         const index = state.stockData.findIndex(p => p.id === productId);
         if (index === -1) {
