@@ -569,11 +569,13 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         document.getElementById('status').value = 'disponivel';
         document.getElementById('packaging').value = 'Frasco plástico';
     }
-    modal.classList.add('active');
-    modal.style.display = 'flex'; // Força a visibilidade
-    modal.style.zIndex = '1000'; // Garante prioridade
-    modal.scrollIntoView({ behavior: 'smooth', block: 'center' }); // Centraliza o modal
-    console.log('[openProductModal] Modal aberto, classe active adicionada, display: flex, z-index: 1000');
+    // Remove a classe active primeiro para forçar re-renderização
+    modal.classList.remove('active');
+    // Usa setTimeout para garantir que o navegador processe a remoção antes de adicionar
+    setTimeout(() => {
+        modal.classList.add('active');
+        console.log('[openProductModal] Modal aberto, classe active adicionada');
+    }, 10);
 }
 
 function closeProductModal() {
