@@ -211,16 +211,11 @@ app.put('/api/stock/:id', async (req, res) => {
         const { id } = req.params;
         const index = parseInt(req.query.index);
         const product = req.body;
-
         console.log(`[API] Atualizando produto ID: ${id}, Index: ${index}, Dados:`, product);
-
-        // Validar campos obrigatórios
-        if (!product.product || !product.batch || product.quantity === undefined || product.quantity === null || !product.unit || !product.location || !product.status) {
+        if (!product.product || !product.batch || product.quantity === undefined || product.quantity === null || !product.unit || !product.location || !product.status || !product.packageType) {
             console.warn('[API] Campos obrigatórios ausentes:', product);
             return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes' });
         }
-
-        // Validar tipos de dados
         if (isNaN(product.quantity) || product.quantity < 0) {
             console.warn('[API] Quantidade inválida:', product.quantity);
             return res.status(400).json({ success: false, error: 'Quantidade inválida' });
@@ -233,20 +228,15 @@ app.put('/api/stock/:id', async (req, res) => {
             console.warn('[API] Número de embalagens inválido:', product.packagingNumber);
             return res.status(400).json({ success: false, error: 'Número de embalagens inválido' });
         }
-
-        // Buscar dados atuais
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Estoque!A2:N'
+            range: 'Estoque!A2:N' // Inclui coluna N para packageType
         });
         const values = response.data.values || [];
-
         if (isNaN(index) || index < 0 || index >= values.length) {
             console.warn('[API] Índice inválido:', index);
             return res.status(400).json({ success: false, error: 'Índice inválido' });
         }
-
-        // Atualizar linha
         values[index] = [
             product.id,
             product.product,
@@ -259,19 +249,16 @@ app.put('/api/stock/:id', async (req, res) => {
             product.minimumStock.toString(),
             product.invoice || '',
             product.expirationDate || '',
-            product.location || 'loc_default', // Alteração: Garantir localização padrão
+            product.location || 'loc_default',
             product.status,
-			product.packageType // Novo campo
+            product.packageType || '' // Garante que packageType seja incluído, mesmo se vazio
         ];
-
-        // Salvar no Google Sheets
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `Estoque!A${index + 2}:M${index + 2}`,
+            range: `Estoque!A${index + 2}:N${index + 2}`, // Corrigido para incluir coluna N
             valueInputOption: 'RAW',
             resource: { values: [values[index]] }
         });
-
         // Registrar log para ação de esgotar (quantidade = 0)
         if (product.quantity === 0) {
             await sheets.spreadsheets.values.append({
@@ -288,7 +275,6 @@ app.put('/api/stock/:id', async (req, res) => {
                 }
             });
         }
-
         console.log(`[API] Produto atualizado com sucesso: ${id}`);
         res.json({ success: true, data: product });
     } catch (error) {

@@ -549,9 +549,7 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         return;
     }
     modalTitle.textContent = title;
-    // Primeiro, popular o dropdown de localização
     populateLocationDropdown();
-    // Depois, preencher os campos
     if (product) {
         document.getElementById('productId').value = product.id;
         document.getElementById('productName').value = product.product || '';
@@ -564,16 +562,16 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         document.getElementById('minimumStock').value = product.minimumStock || 0;
         document.getElementById('invoice').value = product.invoice || '';
         document.getElementById('expirationDate').value = product.expirationDate || '';
-        document.getElementById('location').value = product.location || ''; // Agora será mantido
+        document.getElementById('location').value = product.location || '';
         document.getElementById('status').value = product.status || 'disponivel';
-       document.getElementById('packageType').value = product.packageType || ''; // Novo campo
+        document.getElementById('packageType').value = product.packageType || 'Frasco plástico'; // Opção padrão
     } else {
         form.reset();
         document.getElementById('productId').value = '';
         document.getElementById('packagingNumber').value = '1';
         document.getElementById('minimumStock').value = '0';
         document.getElementById('status').value = 'disponivel';
-		document.getElementById('packageType').value = ''; // Novo campo
+        document.getElementById('packageType').value = 'Frasco plástico'; // Opção padrão
     }
     modal.classList.add('active');
 }
@@ -779,8 +777,12 @@ async function handleProductSubmit(e) {
     showLoading();
     try {
         const productId = document.getElementById('productId').value;
+        const packageType = document.getElementById('packageType').value;
+        if (!packageType) {
+            throw new Error('Selecione um tipo de embalagem válido.');
+        }
         const product = {
-            id: productId || `prod_${Date.now()}`,
+            id: productId || await generateFrontendSequentialId('prod_'),
             product: document.getElementById('productName').value,
             manufacturer: document.getElementById('manufacturer').value,
             batch: document.getElementById('batch').value,
@@ -793,7 +795,7 @@ async function handleProductSubmit(e) {
             expirationDate: document.getElementById('expirationDate').value,
             location: document.getElementById('location').value,
             status: document.getElementById('status').value,
-		    packageType: document.getElementById('packageType').value // Novo campo
+            packageType: packageType
         };
         let response;
         if (productId) {
