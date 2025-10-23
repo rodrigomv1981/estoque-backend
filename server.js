@@ -65,7 +65,7 @@ app.get('/api/stock', async (req, res) => {
         console.log('[API] Carregando dados de estoque...');
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Estoque!A2:M'
+            range: 'Estoque!A2:N'
         });
 
         const values = response.data.values || [];
@@ -87,6 +87,7 @@ app.get('/api/stock', async (req, res) => {
         expirationDate: normalizeDate(row[10]),
         location: location,
         status: row[12] || 'disponivel'
+       packageType: row[13] || '' // Novo campo
     };
 		}).filter(item => item.product && item.batch);
 
@@ -171,11 +172,12 @@ app.post('/api/stock', async (req, res) => {
             product.expirationDate || '',
             product.location,
             product.status
+            product.packageType // Novo campo
         ];
 
         const response = await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Estoque!A:M',
+            range: 'Estoque!A:N',
             valueInputOption: 'RAW',
             resource: { values: [values] }
         });
@@ -235,7 +237,7 @@ app.put('/api/stock/:id', async (req, res) => {
         // Buscar dados atuais
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Estoque!A2:M'
+            range: 'Estoque!A2:N'
         });
         const values = response.data.values || [];
 
@@ -259,6 +261,7 @@ app.put('/api/stock/:id', async (req, res) => {
             product.expirationDate || '',
             product.location || 'loc_default', // Alteração: Garantir localização padrão
             product.status
+			product.packageType // Novo campo
         ];
 
         // Salvar no Google Sheets
@@ -336,6 +339,34 @@ app.delete('/api/stock/:id', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         console.error('[API] Erro ao excluir produto:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Rota para adicionar log
+app.post('/api/logs', async (req, res) => {
+    try {
+        const log = req.body;
+        if (!log.action || !log.details || !log.timestamp) {
+            console.warn('[API] Campos obrigatórios ausentes no log:', log);
+            return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes' });
+        }
+        const values = [
+            log.id || `log_${Date.now()}`,
+            log.action,
+            log.details,
+            log.timestamp
+        ];
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'Logs!A:D',
+            valueInputOption: 'RAW',
+            resource: { values: [values] }
+        });
+        console.log(`[API] Log adicionado: ${log.action} - ${log.details}`);
+        res.json({ success: true, data: log });
+    } catch (error) {
+        console.error('[API] Erro ao adicionar log:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

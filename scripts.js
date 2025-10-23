@@ -312,6 +312,12 @@ function createProductCard(item) {
                     <span class="info-value">${escapeHtml(item.packaging)} (${item.packagingNumber}x)</span>
                 </div>
                 ` : ''}
+				 ${item.packageType ? `
+                <div class="info-row">
+                    <span class="info-label">Tipo de Embalagem</span>
+                    <span class="info-value">${escapeHtml(item.packageType)}</span>
+                </div>
+                ` : ''}
                 ${isLowStock ? `
                 <div class="info-row">
                     <span class="info-label" style="color: var(--info);">⚠️ Estoque Baixo</span>
@@ -560,12 +566,14 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         document.getElementById('expirationDate').value = product.expirationDate || '';
         document.getElementById('location').value = product.location || ''; // Agora será mantido
         document.getElementById('status').value = product.status || 'disponivel';
+       document.getElementById('packageType').value = product.packageType || ''; // Novo campo
     } else {
         form.reset();
         document.getElementById('productId').value = '';
         document.getElementById('packagingNumber').value = '1';
         document.getElementById('minimumStock').value = '0';
         document.getElementById('status').value = 'disponivel';
+		document.getElementById('packageType').value = ''; // Novo campo
     }
     modal.classList.add('active');
 }
@@ -785,6 +793,7 @@ async function handleProductSubmit(e) {
             expirationDate: document.getElementById('expirationDate').value,
             location: document.getElementById('location').value,
             status: document.getElementById('status').value
+		    packageType: document.getElementById('packageType').value // Novo campo
         };
         let response;
         if (productId) {
@@ -944,10 +953,52 @@ async function handleTransferProductSubmit(e) {
         if (product.packagingNumber <= 1) {
             throw new Error('Produto não possui múltiplas embalagens para transferência.');
         }
+        // Verificar se já existe um produto com mesmo product, batch e nova localização
+        const existingProduct = state.stockData.find(p =>
+            p.product === product.product &&
+            p.batch === product.batch &&
+            p.location === newLocationId
+        );
+        if (existingProduct) {
+            // Atualizar produto existente na nova localização
+            const updatedExistingProduct = {
+                ...existingProduct,
+                packagingNumber: existingProduct.packagingNumber + 1,
+                quantity: existingProduct.quantity + product.quantity
+		        packageType: product.packageType // Manter o mesmo tipo de embalagem
+            };
+            const existingIndex = state.stockData.findIndex(p => p.id === existingProduct.id);
+            const updateExistingResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${existingProduct.id}?index=${existingIndex}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedExistingProduct)
+            });
+            if (!updateExistingResponse.ok) {
+                throw new Error(`Erro ao atualizar produto existente: ${updateExistingResponse.status} ${updateExistingResponse.statusText}`);
+            }
+        } else {
+            // Criar novo produto na nova localização
+            const newProduct = {
+                ...product,
+                id: await generateFrontendSequentialId('prod_'),
+                packagingNumber: 1,
+                location: newLocationId
+		        packageType: product.packageType // Incluir tipo de embalagem
+
+            };
+            const addResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newProduct)
+            });
+            if (!addResponse.ok) {
+                throw new Error(`Erro ao criar novo produto: ${addResponse.status} ${addResponse.statusText}`);
+            }
+        }
+        // Atualizar produto original (reduzir embalagens)
         const updatedProduct = {
             ...product,
-            packagingNumber: product.packagingNumber - 1,
-            quantity: product.quantity / product.packagingNumber
+            packagingNumber: product.packagingNumber - 1
         };
         const index = state.stockData.findIndex(p => p.id === productId);
         const updateResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
@@ -958,22 +1009,17 @@ async function handleTransferProductSubmit(e) {
         if (!updateResponse.ok) {
             throw new Error(`Erro ao atualizar produto: ${updateResponse.status} ${updateResponse.statusText}`);
         }
-		const newProduct = {
-				...product,
-			id: await generateFrontendSequentialId('prod_'), // Nova função no frontend
-			packagingNumber: 1,
-			quantity: product.quantity / product.packagingNumber,
-			location: newLocationId
-		};
-        console.log('[handleTransferProductSubmit] Novo produto:', newProduct);
-        const addResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock`, {
+        // Registrar log
+        await fetch(`${CONFIG.API_BASE_URL}/api/logs`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newProduct)
+            body: JSON.stringify({
+                id: `log_${Date.now()}`,
+                action: 'Transferir Produto',
+                details: `${product.product} (Lote: ${product.batch}) para ${getLocationName(newLocationId)}`,
+                timestamp: new Date().toISOString()
+            })
         });
-        if (!addResponse.ok) {
-            throw new Error(`Erro ao criar novo produto: ${addResponse.status} ${addResponse.statusText}`);
-        }
         await loadStock();
         applyFilters();
         displayStock();
