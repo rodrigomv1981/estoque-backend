@@ -731,7 +731,7 @@ body {
     bottom: 0;
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(4px);
-    z-index: 999;
+    z-index: 1;
 }
 
 .modal-content {
@@ -744,7 +744,7 @@ body {
     overflow-y: auto;
     box-shadow: var(--shadow-xl);
     animation: slideUp 0.3s ease-in-out;
-    z-index: 1001;
+    z-index: 2;
     padding: 1rem; /* Garante espaço interno */
 }
 
