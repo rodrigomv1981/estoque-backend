@@ -32,6 +32,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
+// ==================== Refresh da página ====================
+
+async function refreshPage() {
+    showLoading();
+    try {
+        state.currentPage = 1; // Resetar para a primeira página
+        await loadAllData();
+        alert('Página atualizada com sucesso!');
+    } catch (error) {
+        console.error('[App] Erro ao atualizar página:', error);
+        alert(`Erro ao atualizar página: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
 // ==================== CARREGAR DADOS ====================
 async function loadAllData() {
     showLoading();
@@ -51,6 +67,13 @@ async function loadAllData() {
     } finally {
         hideLoading();
     }
+}
+
+async function generateFrontendSequentialId(prefix) {
+    const response = await fetch(`${CONFIG.API_BASE_URL}/api/stock`);
+    const result = await response.json();
+    const count = result.data.length + 1;
+    return `${prefix}${count.toString().padStart(6, '0')}`;
 }
 
 async function loadStock() {
@@ -520,6 +543,9 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         return;
     }
     modalTitle.textContent = title;
+    // Primeiro, popular o dropdown de localização
+    populateLocationDropdown();
+    // Depois, preencher os campos
     if (product) {
         document.getElementById('productId').value = product.id;
         document.getElementById('productName').value = product.product || '';
@@ -532,7 +558,7 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         document.getElementById('minimumStock').value = product.minimumStock || 0;
         document.getElementById('invoice').value = product.invoice || '';
         document.getElementById('expirationDate').value = product.expirationDate || '';
-        document.getElementById('location').value = product.location || '';
+        document.getElementById('location').value = product.location || ''; // Agora será mantido
         document.getElementById('status').value = product.status || 'disponivel';
     } else {
         form.reset();
@@ -541,7 +567,6 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         document.getElementById('minimumStock').value = '0';
         document.getElementById('status').value = 'disponivel';
     }
-    populateLocationDropdown();
     modal.classList.add('active');
 }
 
@@ -697,6 +722,8 @@ function initializeEventListeners() {
     document.getElementById('cancelTransferBtn')?.addEventListener('click', closeTransferProductModal);
     document.getElementById('transferProductModal')?.querySelector('.modal-overlay')?.addEventListener('click', closeTransferProductModal);
     document.getElementById('transferProductForm')?.addEventListener('submit', handleTransferProductSubmit);
+    document.getElementById('refreshPageBtn')?.addEventListener('click', refreshPage);
+
 
     // Delegação de eventos para botões dinâmicos
     document.getElementById('stockList')?.addEventListener('click', (e) => {
@@ -931,13 +958,13 @@ async function handleTransferProductSubmit(e) {
         if (!updateResponse.ok) {
             throw new Error(`Erro ao atualizar produto: ${updateResponse.status} ${updateResponse.statusText}`);
         }
-        const newProduct = {
-            ...product,
-            id: `prod_${Date.now()}`,
-            packagingNumber: 1,
-            quantity: product.quantity / product.packagingNumber,
-            location: newLocationId
-        };
+		const newProduct = {
+				...product,
+			id: await generateFrontendSequentialId('prod_'), // Nova função no frontend
+			packagingNumber: 1,
+			quantity: product.quantity / product.packagingNumber,
+			location: newLocationId
+		};
         console.log('[handleTransferProductSubmit] Novo produto:', newProduct);
         const addResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock`, {
             method: 'POST',
@@ -1019,20 +1046,6 @@ async function exhaustProduct(productId) {
         if (!result.success) {
             throw new Error(result.error || 'Erro ao esgotar produto');
         }
-        // Registrar log no frontend (opcional, já que o backend também registra)
-        await sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_ID,
-            range: 'Logs!A:D',
-            valueInputOption: 'RAW',
-            resource: {
-                values: [[
-                    `log_${Date.now()}`,
-                    'Esgotar Produto',
-                    `${product.product} (Lote: ${product.batch})`,
-                    new Date().toISOString()
-                ]]
-            }
-        });
         await loadStock();
         applyFilters();
         displayStock();

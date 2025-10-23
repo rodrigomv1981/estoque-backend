@@ -9,6 +9,27 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 
+// Função para gerar IDs sequenciais
+async function generateSequentialId(sheetName, prefix) {
+    try {
+        const range = sheetName === 'Estoque' ? 'Estoque!A2:A' : 'Localidades!A2:A';
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range
+        });
+        const values = response.data.values || [];
+        const count = values.length + 1; // Próximo número na sequência
+        if (sheetName === 'Estoque') {
+            return `${prefix}${count.toString().padStart(6, '0')}`; // Ex: prod_000001
+        } else {
+            return `${prefix}${count.toString().padStart(3, '0')}`; // Ex: local_001
+        }
+    } catch (error) {
+        console.error(`[API] Erro ao gerar ID sequencial para ${sheetName}:`, error);
+        throw error;
+    }
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -49,39 +70,25 @@ app.get('/api/stock', async (req, res) => {
 
         const values = response.data.values || [];
         const stockData = values.map((row, index) => {
-            const quantityStr = row[4] ? row[4].toString().replace(',', '.') : '0';
-            const minimumStockStr = row[8] ? row[8].toString().replace(',', '.') : '0';
-            const location = row[11] || 'loc_default'; // Alteração: Definir localização padrão se vazia
-
-            const item = {
-                id: row[0] || `temp_${Date.now()}_${index}`,
-                product: row[1] || 'Produto Desconhecido',
-                manufacturer: row[2] || '',
-                batch: row[3] || `Lote_${index + 2}`,
-                quantity: parseFloat(quantityStr) || 0,
-                unit: row[5] || 'un',
-                packaging: row[6] || '',
-                packagingNumber: parseInt(row[7]) || 1,
-                minimumStock: parseFloat(minimumStockStr) || 0,
-                invoice: row[9] || '',
-                expirationDate: normalizeDate(row[10]),
-                location: location,
-                status: row[12] || 'disponivel'
-            };
-
-            if (!item.product || !item.batch) {
-                console.warn(`[API] Item inválido na linha ${index + 2}: product ou batch ausente`, item);
-            }
-            if (item.expirationDate && isNaN(new Date(item.expirationDate))) {
-                console.warn(`[API] Data de validade inválida na linha ${index + 2}: ${item.expirationDate}`);
-                item.expirationDate = '';
-            }
-            if (!item.location) {
-                console.warn(`[API] Localização ausente na linha ${index + 2}, usando padrão: loc_default`);
-            }
-
-            return item;
-        }).filter(item => item.product && item.batch);
+    const quantityStr = row[4] ? row[4].toString().replace(',', '.') : '0';
+    const minimumStockStr = row[8] ? row[8].toString().replace(',', '.') : '0';
+    const location = row[11] || 'loc_default';
+    return {
+        id: row[0] || `prod_${(index + 1).toString().padStart(6, '0')}`, // Alterado para sequencial
+        product: row[1] || 'Produto Desconhecido',
+        manufacturer: row[2] || '',
+        batch: row[3] || `Lote_${index + 2}`,
+        quantity: parseFloat(quantityStr) || 0,
+        unit: row[5] || 'un',
+        packaging: row[6] || '',
+        packagingNumber: parseInt(row[7]) || 1,
+        minimumStock: parseFloat(minimumStockStr) || 0,
+        invoice: row[9] || '',
+        expirationDate: normalizeDate(row[10]),
+        location: location,
+        status: row[12] || 'disponivel'
+    };
+		}).filter(item => item.product && item.batch);
 
         console.log(`[API] Estoque carregado: ${stockData.length} itens`);
         res.json({ success: true, data: stockData });
@@ -102,10 +109,10 @@ app.get('/api/locations', async (req, res) => {
 
         const values = response.data.values || [];
         const locationsData = values.map((row, index) => ({
-            id: row[0] || `temp_${Date.now()}_${index}`,
-            room: row[1] || 'Sala Desconhecida',
-            cabinet: row[2] || ''
-        }));
+			id: row[0] || `local_${(index + 1).toString().padStart(3, '0')}`, // Alterado para sequencial
+			room: row[1] || 'Sala Desconhecida',
+			cabinet: row[2] || ''
+			}));
 
         console.log(`[API] Localidades carregadas: ${locationsData.length} itens`);
         res.json({ success: true, data: locationsData });
@@ -148,7 +155,8 @@ app.post('/api/stock', async (req, res) => {
             console.warn('[API] Campos obrigatórios ausentes:', product);
             return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes' });
         }
-
+        // Gerar ID sequencial
+        product.id = product.id || await generateSequentialId('Estoque', 'prod_');
         const values = [
             product.id,
             product.product,
@@ -340,7 +348,8 @@ app.post('/api/locations', async (req, res) => {
             console.warn('[API] Campo sala é obrigatório:', location);
             return res.status(400).json({ success: false, error: 'Campo sala é obrigatório' });
         }
-
+        // Gerar ID sequencial
+        location.id = location.id || await generateSequentialId('Localidades', 'local_');
         const values = [location.id, location.room, location.cabinet || ''];
 
         const response = await sheets.spreadsheets.values.append({

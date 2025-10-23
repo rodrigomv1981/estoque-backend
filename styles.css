@@ -965,6 +965,22 @@ body {
     .form-actions button {
         width: 100%;
     }
+	
+	.section-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+    .section-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+    .section-actions .btn-primary {
+        flex: 1;
+    }
+
 
     /* Ajuste para manter botões horizontais em telas pequenas */
     .product-actions.horizontal {
@@ -1011,13 +1027,15 @@ body {
 
 .total-stock-header {
     background: var(--bg-tertiary);
-    padding: 1rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
+    padding: 0.75rem 1rem; /* Reduzido para melhor proporção */
+    border-radius: var(--radius-md);
+    margin-bottom: 0.75rem; /* Reduzido para menos espaço */
     display: flex;
+    flex-wrap: wrap; /* Permite quebra em telas menores */
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm); /* Sombra mais leve */
+    gap: 0.5rem; /* Espaço entre elementos */
 }
 
 .total-stock-header.low-stock {
@@ -1027,14 +1045,30 @@ body {
 
 .total-stock-header h4 {
     margin: 0;
-    font-size: 1.25rem;
+    font-size: 1.1rem; /* Reduzido de 1.25rem */
     font-weight: 600;
+    color: var(--text-primary);
 }
 
 .total-stock-header p {
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.9rem; /* Reduzido de 1rem */
     color: var(--text-secondary);
+    font-weight: 500; /* Adicionado para consistência */
+}
+
+/* Ajuste responsivo */
+@media (max-width: 480px) {
+    .total-stock-header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .total-stock-header h4,
+    .total-stock-header p {
+        font-size: 0.85rem; /* Menor em telas pequenas */
+    }
 }
 
 .product-group-items {
