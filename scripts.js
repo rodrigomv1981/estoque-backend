@@ -539,7 +539,7 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
     const form = document.getElementById('productForm');
     if (!modal || !modalTitle || !form) {
         console.error('[UI] Elementos do modal de produto não encontrados', { modal, modalTitle, form });
-        alert('Erro na interface: modal de produto não encontrado. Contate o suporte.');
+        alert('Erro na interface: modal de produto não encontrado. Verifique o console para detalhes.');
         return;
     }
     console.log('[openProductModal] Abrindo modal com título:', title, 'Produto:', product);
@@ -570,9 +570,10 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         document.getElementById('packaging').value = 'Frasco plástico';
     }
     modal.classList.add('active');
-    modal.style.display = 'flex'; // Força a visibilidade do modal
-    modal.scrollIntoView({ behavior: 'smooth', block: 'center' }); // Centraliza o modal na tela
-    console.log('[openProductModal] Modal aberto com sucesso, classe active adicionada');
+    modal.style.display = 'flex'; // Força a visibilidade
+    modal.style.zIndex = '1000'; // Garante prioridade
+    modal.scrollIntoView({ behavior: 'smooth', block: 'center' }); // Centraliza o modal
+    console.log('[openProductModal] Modal aberto, classe active adicionada, display: flex, z-index: 1000');
 }
 
 function closeProductModal() {
@@ -753,12 +754,16 @@ document.getElementById('stockList')?.addEventListener('click', (e) => {
         console.log('[Event] Abrindo modal para edição do produto:', product);
         openProductModal('Editar Produto', product);
     } else if (target.classList.contains('delete')) {
+        console.log('[Event] Excluindo produto:', productId);
         deleteProduct(productId);
     } else if (target.classList.contains('use')) {
+        console.log('[Event] Abrindo modal de uso do produto:', product);
         openUseProductModal(product);
     } else if (target.classList.contains('exhaust')) {
+        console.log('[Event] Esgotando produto:', productId);
         exhaustProduct(productId);
     } else if (target.classList.contains('transfer')) {
+        console.log('[Event] Abrindo modal de transferência do produto:', product);
         openTransferProductModal(product);
     }
 });
@@ -978,6 +983,7 @@ async function handleTransferProductSubmit(e) {
 
         if (existingProduct) {
             // Atualizar o número de embalagens e quantidade do produto existente
+            console.log('[handleTransferProductSubmit] Produto existente encontrado, atualizando:', existingProduct);
             const updatedExistingProduct = {
                 ...existingProduct,
                 packagingNumber: existingProduct.packagingNumber + 1,
@@ -990,11 +996,14 @@ async function handleTransferProductSubmit(e) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updatedExistingProduct)
             });
+            const updateResult = await updateExistingResponse.json();
             if (!updateExistingResponse.ok) {
-                throw new Error(`Erro ao atualizar produto existente: ${updateExistingResponse.status} ${updateExistingResponse.statusText}`);
+                throw new Error(`Erro ao atualizar produto existente: ${updateExistingResponse.status} ${updateResult.error || updateExistingResponse.statusText}`);
             }
+            console.log('[handleTransferProductSubmit] Produto existente atualizado com sucesso:', updateResult);
         } else {
             // Criar novo produto na nova localização com 1 embalagem e quantidade por embalagem
+            console.log('[handleTransferProductSubmit] Criando novo produto na nova localização');
             const newProduct = {
                 ...product,
                 id: await generateFrontendSequentialId('prod_'),
@@ -1003,17 +1012,21 @@ async function handleTransferProductSubmit(e) {
                 location: newLocationId,
                 packaging: product.packaging || 'Frasco plástico'
             };
+            console.log('[handleTransferProductSubmit] Dados do novo produto:', newProduct);
             const addResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newProduct)
             });
+            const addResult = await addResponse.json();
             if (!addResponse.ok) {
-                throw new Error(`Erro ao criar novo produto: ${addResponse.status} ${addResponse.statusText}`);
+                throw new Error(`Erro ao criar novo produto: ${addResponse.status} ${addResult.error || addResponse.statusText}`);
             }
+            console.log('[handleTransferProductSubmit] Novo produto criado com sucesso:', addResult);
         }
 
         // Atualizar produto original (reduzir embalagens e quantidade)
+        console.log('[handleTransferProductSubmit] Atualizando produto original:', product);
         const updatedProduct = {
             ...product,
             packagingNumber: product.packagingNumber - 1,
@@ -1026,11 +1039,14 @@ async function handleTransferProductSubmit(e) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updatedProduct)
         });
+        const updateResult = await updateResponse.json();
         if (!updateResponse.ok) {
-            throw new Error(`Erro ao atualizar produto: ${updateResponse.status} ${updateResponse.statusText}`);
+            throw new Error(`Erro ao atualizar produto: ${updateResponse.status} ${updateResult.error || updateResponse.statusText}`);
         }
+        console.log('[handleTransferProductSubmit] Produto original atualizado com sucesso:', updateResult);
 
         // Registrar log
+        console.log('[handleTransferProductSubmit] Registrando log da transferência');
         await fetch(`${CONFIG.API_BASE_URL}/api/logs`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

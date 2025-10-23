@@ -151,6 +151,7 @@ app.get('/api/logs', async (req, res) => {
 app.post('/api/stock', async (req, res) => {
     try {
         const product = req.body;
+        console.log('[API] Recebendo solicitação para adicionar produto:', product);
         if (!product.product || !product.batch || product.quantity === undefined || product.quantity === null || product.quantity < 0 || !product.unit || !product.location || !product.status || !product.packaging || isNaN(product.packagingNumber) || product.packagingNumber < 0) {
             console.warn('[API] Campos obrigatórios ausentes ou inválidos:', product);
             return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes, quantidade negativa ou número de embalagens inválido' });
@@ -173,6 +174,7 @@ app.post('/api/stock', async (req, res) => {
             product.status
         ];
 
+        console.log('[API] Adicionando produto à planilha:', values);
         const response = await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
             range: 'Estoque!A:M',
@@ -181,6 +183,7 @@ app.post('/api/stock', async (req, res) => {
         });
 
         // Registrar log
+        console.log('[API] Registrando log para adição de produto');
         await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
             range: 'Logs!A:D',
@@ -195,7 +198,7 @@ app.post('/api/stock', async (req, res) => {
             }
         });
 
-        console.log(`[API] Produto adicionado: ${product.product} (Lote: ${product.batch})`);
+        console.log(`[API] Produto adicionado com sucesso: ${product.product} (Lote: ${product.batch})`);
         res.json({ success: true, data: product });
     } catch (error) {
         console.error('[API] Erro ao adicionar produto:', error);
