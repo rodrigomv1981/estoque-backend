@@ -538,7 +538,7 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
     const modalTitle = document.getElementById('modalTitle');
     const form = document.getElementById('productForm');
     if (!modal || !modalTitle || !form) {
-        console.error('[UI] Elementos do modal de produto não encontrados');
+        console.error('[UI] Elementos do modal de produto não encontrados', { modal, modalTitle, form });
         alert('Erro na interface: modal de produto não encontrado. Contate o suporte.');
         return;
     }
@@ -546,13 +546,14 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
     modalTitle.textContent = title;
     populateLocationDropdown();
     if (product) {
-        document.getElementById('productId').value = product.id;
+        console.log('[openProductModal] Preenchendo formulário com dados do produto:', product);
+        document.getElementById('productId').value = product.id || '';
         document.getElementById('productName').value = product.product || '';
         document.getElementById('manufacturer').value = product.manufacturer || '';
         document.getElementById('batch').value = product.batch || '';
         document.getElementById('quantity').value = product.quantity || '';
         document.getElementById('unit').value = product.unit || 'un';
-        document.getElementById('packaging').value = product.packaging || '';
+        document.getElementById('packaging').value = product.packaging || 'Frasco plástico';
         document.getElementById('packagingNumber').value = product.packagingNumber || 1;
         document.getElementById('minimumStock').value = product.minimumStock || 0;
         document.getElementById('invoice').value = product.invoice || '';
@@ -560,15 +561,18 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         document.getElementById('location').value = product.location || '';
         document.getElementById('status').value = product.status || 'disponivel';
     } else {
+        console.log('[openProductModal] Resetando formulário para novo produto');
         form.reset();
         document.getElementById('productId').value = '';
         document.getElementById('packagingNumber').value = '1';
         document.getElementById('minimumStock').value = '0';
         document.getElementById('status').value = 'disponivel';
-        document.getElementById('packaging').value = 'Frasco plástico'; // Opção padrão
+        document.getElementById('packaging').value = 'Frasco plástico';
     }
     modal.classList.add('active');
-    console.log('[openProductModal] Modal aberto com sucesso');
+    modal.style.display = 'flex'; // Força a visibilidade do modal
+    modal.scrollIntoView({ behavior: 'smooth', block: 'center' }); // Centraliza o modal na tela
+    console.log('[openProductModal] Modal aberto com sucesso, classe active adicionada');
 }
 
 function closeProductModal() {
@@ -960,17 +964,24 @@ async function handleTransferProductSubmit(e) {
         if (product.packagingNumber <= 1) {
             throw new Error('Produto não possui múltiplas embalagens para transferência.');
         }
+        const quantityPerPackage = product.quantity / product.packagingNumber;
+        if (product.quantity < quantityPerPackage) {
+            throw new Error('Quantidade insuficiente para transferência.');
+        }
+
         // Verificar se já existe um produto com mesmo product, batch e nova localização
         const existingProduct = state.stockData.find(p =>
             p.product === product.product &&
             p.batch === product.batch &&
             p.location === newLocationId
         );
+
         if (existingProduct) {
-            // Atualizar apenas o número de embalagens
+            // Atualizar o número de embalagens e quantidade do produto existente
             const updatedExistingProduct = {
                 ...existingProduct,
                 packagingNumber: existingProduct.packagingNumber + 1,
+                quantity: existingProduct.quantity + quantityPerPackage,
                 packaging: product.packaging || 'Frasco plástico'
             };
             const existingIndex = state.stockData.findIndex(p => p.id === existingProduct.id);
@@ -983,11 +994,12 @@ async function handleTransferProductSubmit(e) {
                 throw new Error(`Erro ao atualizar produto existente: ${updateExistingResponse.status} ${updateExistingResponse.statusText}`);
             }
         } else {
-            // Criar novo produto na nova localização
+            // Criar novo produto na nova localização com 1 embalagem e quantidade por embalagem
             const newProduct = {
                 ...product,
                 id: await generateFrontendSequentialId('prod_'),
                 packagingNumber: 1,
+                quantity: quantityPerPackage,
                 location: newLocationId,
                 packaging: product.packaging || 'Frasco plástico'
             };
@@ -1000,10 +1012,12 @@ async function handleTransferProductSubmit(e) {
                 throw new Error(`Erro ao criar novo produto: ${addResponse.status} ${addResponse.statusText}`);
             }
         }
-        // Atualizar produto original (reduzir embalagens)
+
+        // Atualizar produto original (reduzir embalagens e quantidade)
         const updatedProduct = {
             ...product,
             packagingNumber: product.packagingNumber - 1,
+            quantity: product.quantity - quantityPerPackage,
             packaging: product.packaging || 'Frasco plástico'
         };
         const index = state.stockData.findIndex(p => p.id === productId);
@@ -1015,6 +1029,7 @@ async function handleTransferProductSubmit(e) {
         if (!updateResponse.ok) {
             throw new Error(`Erro ao atualizar produto: ${updateResponse.status} ${updateResponse.statusText}`);
         }
+
         // Registrar log
         await fetch(`${CONFIG.API_BASE_URL}/api/logs`, {
             method: 'POST',
@@ -1026,6 +1041,7 @@ async function handleTransferProductSubmit(e) {
                 timestamp: new Date().toISOString()
             })
         });
+
         await loadStock();
         applyFilters();
         displayStock();

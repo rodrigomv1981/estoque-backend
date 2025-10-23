@@ -151,9 +151,9 @@ app.get('/api/logs', async (req, res) => {
 app.post('/api/stock', async (req, res) => {
     try {
         const product = req.body;
-        if (!product.product || !product.batch || !product.quantity || !product.unit || !product.location || !product.status) {
-            console.warn('[API] Campos obrigatórios ausentes:', product);
-            return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes' });
+        if (!product.product || !product.batch || product.quantity === undefined || product.quantity === null || product.quantity < 0 || !product.unit || !product.location || !product.status || !product.packaging || isNaN(product.packagingNumber) || product.packagingNumber < 0) {
+            console.warn('[API] Campos obrigatórios ausentes ou inválidos:', product);
+            return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes, quantidade negativa ou número de embalagens inválido' });
         }
         // Gerar ID sequencial
         product.id = product.id || await generateSequentialId('Estoque', 'prod_');
@@ -210,9 +210,9 @@ app.put('/api/stock/:id', async (req, res) => {
         const index = parseInt(req.query.index);
         const product = req.body;
         console.log(`[API] Atualizando produto ID: ${id}, Index: ${index}, Dados:`, product);
-        if (!product.product || !product.batch || product.quantity === undefined || product.quantity === null || !product.unit || !product.location || !product.status || !product.packaging) {
-            console.warn('[API] Campos obrigatórios ausentes:', product);
-            return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes' });
+        if (!product.product || !product.batch || product.quantity === undefined || product.quantity === null || product.quantity < 0 || !product.unit || !product.location || !product.status || !product.packaging || isNaN(product.packagingNumber) || product.packagingNumber < 0) {
+            console.warn('[API] Campos obrigatórios ausentes ou inválidos:', product);
+            return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes, quantidade negativa ou número de embalagens inválido' });
         }
         if (isNaN(product.quantity) || product.quantity < 0) {
             console.warn('[API] Quantidade inválida:', product.quantity);
