@@ -569,13 +569,8 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         document.getElementById('status').value = 'disponivel';
         document.getElementById('packaging').value = 'Frasco plástico';
     }
-    // Remove a classe active primeiro para forçar re-renderização
-    modal.classList.remove('active');
-    // Usa setTimeout para garantir que o navegador processe a remoção antes de adicionar
-    setTimeout(() => {
-        modal.classList.add('active');
-        console.log('[openProductModal] Modal aberto, classe active adicionada');
-    }, 10);
+    modal.classList.add('active');
+    console.log('[openProductModal] Modal aberto, classe active adicionada');
 }
 
 function closeProductModal() {
