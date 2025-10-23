@@ -308,14 +308,8 @@ function createProductCard(item) {
                 </div>
                 ${item.packaging ? `
                 <div class="info-row">
-                    <span class="info-label">Embalagem</span>
-                    <span class="info-value">${escapeHtml(item.packaging)} (${item.packagingNumber}x)</span>
-                </div>
-                ` : ''}
-				 ${item.packageType ? `
-                <div class="info-row">
-                    <span class="info-label">Tipo de Embalagem</span>
-                    <span class="info-value">${escapeHtml(item.packageType)}</span>
+                    <span class="info-label">Quantidade de Embalagens</span>
+                    <span class="info-value">${item.packagingNumber}x ${escapeHtml(item.packaging)}</span>
                 </div>
                 ` : ''}
                 ${isLowStock ? `
@@ -548,6 +542,7 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         alert('Erro na interface: modal de produto não encontrado. Contate o suporte.');
         return;
     }
+    console.log('[openProductModal] Abrindo modal com título:', title, 'Produto:', product);
     modalTitle.textContent = title;
     populateLocationDropdown();
     if (product) {
@@ -564,16 +559,16 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         document.getElementById('expirationDate').value = product.expirationDate || '';
         document.getElementById('location').value = product.location || '';
         document.getElementById('status').value = product.status || 'disponivel';
-        document.getElementById('packageType').value = product.packageType || 'Frasco plástico'; // Opção padrão
     } else {
         form.reset();
         document.getElementById('productId').value = '';
         document.getElementById('packagingNumber').value = '1';
         document.getElementById('minimumStock').value = '0';
         document.getElementById('status').value = 'disponivel';
-        document.getElementById('packageType').value = 'Frasco plástico'; // Opção padrão
+        document.getElementById('packaging').value = 'Frasco plástico'; // Opção padrão
     }
     modal.classList.add('active');
+    console.log('[openProductModal] Modal aberto com sucesso');
 }
 
 function closeProductModal() {
@@ -707,7 +702,10 @@ function initializeEventListeners() {
     });
 
     // Modais
-    document.getElementById('addProductBtn')?.addEventListener('click', () => openProductModal());
+	document.getElementById('addProductBtn')?.addEventListener('click', () => {
+    console.log('[Event] Clicou em Adicionar Produto');
+    openProductModal();
+	});
     document.getElementById('closeModal')?.addEventListener('click', closeProductModal);
     document.getElementById('cancelBtn')?.addEventListener('click', closeProductModal);
     document.getElementById('productModal')?.querySelector('.modal-overlay')?.addEventListener('click', closeProductModal);
@@ -732,27 +730,34 @@ function initializeEventListeners() {
 
 
     // Delegação de eventos para botões dinâmicos
-    document.getElementById('stockList')?.addEventListener('click', (e) => {
-        const target = e.target.closest('.btn-action');
-        if (!target) return;
-        const productId = target.dataset.id;
-        const product = state.stockData.find(p => p.id === productId);
-        if (!product) {
-            alert('Produto não encontrado.');
-            return;
-        }
-        if (target.classList.contains('edit')) {
-            openProductModal('Editar Produto', product);
-        } else if (target.classList.contains('delete')) {
-            deleteProduct(productId);
-        } else if (target.classList.contains('use')) {
-            openUseProductModal(product);
-        } else if (target.classList.contains('exhaust')) {
-            exhaustProduct(productId);
-        } else if (target.classList.contains('transfer')) {
-            openTransferProductModal(product);
-        }
-    });
+document.getElementById('stockList')?.addEventListener('click', (e) => {
+    console.log('[Event] Clique em #stockList:', e.target);
+    const target = e.target.closest('.btn-action');
+    if (!target) {
+        console.log('[Event] Nenhum botão .btn-action encontrado');
+        return;
+    }
+    const productId = target.dataset.id;
+    console.log('[Event] Botão clicado, productId:', productId, 'Classes:', target.classList);
+    const product = state.stockData.find(p => p.id === productId);
+    if (!product) {
+        console.error('[Event] Produto não encontrado para ID:', productId);
+        alert('Produto não encontrado.');
+        return;
+    }
+    if (target.classList.contains('edit')) {
+        console.log('[Event] Abrindo modal para edição do produto:', product);
+        openProductModal('Editar Produto', product);
+    } else if (target.classList.contains('delete')) {
+        deleteProduct(productId);
+    } else if (target.classList.contains('use')) {
+        openUseProductModal(product);
+    } else if (target.classList.contains('exhaust')) {
+        exhaustProduct(productId);
+    } else if (target.classList.contains('transfer')) {
+        openTransferProductModal(product);
+    }
+});
 
     document.getElementById('locationsList')?.addEventListener('click', (e) => {
         const target = e.target.closest('.btn-action');
@@ -777,8 +782,8 @@ async function handleProductSubmit(e) {
     showLoading();
     try {
         const productId = document.getElementById('productId').value;
-        const packageType = document.getElementById('packageType').value;
-        if (!packageType) {
+        const packaging = document.getElementById('packaging').value;
+        if (!packaging) {
             throw new Error('Selecione um tipo de embalagem válido.');
         }
         const product = {
@@ -795,7 +800,7 @@ async function handleProductSubmit(e) {
             expirationDate: document.getElementById('expirationDate').value,
             location: document.getElementById('location').value,
             status: document.getElementById('status').value,
-            packageType: packageType
+            packaging: packaging
         };
         let response;
         if (productId) {
@@ -962,12 +967,11 @@ async function handleTransferProductSubmit(e) {
             p.location === newLocationId
         );
         if (existingProduct) {
-            // Atualizar produto existente na nova localização
+            // Atualizar apenas o número de embalagens
             const updatedExistingProduct = {
                 ...existingProduct,
                 packagingNumber: existingProduct.packagingNumber + 1,
-                quantity: existingProduct.quantity + product.quantity,
-                packageType: product.packageType || 'Frasco plástico' // Inclui packageType
+                packaging: product.packaging || 'Frasco plástico'
             };
             const existingIndex = state.stockData.findIndex(p => p.id === existingProduct.id);
             const updateExistingResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${existingProduct.id}?index=${existingIndex}`, {
@@ -985,7 +989,7 @@ async function handleTransferProductSubmit(e) {
                 id: await generateFrontendSequentialId('prod_'),
                 packagingNumber: 1,
                 location: newLocationId,
-                packageType: product.packageType || 'Frasco plástico' // Inclui packageType
+                packaging: product.packaging || 'Frasco plástico'
             };
             const addResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock`, {
                 method: 'POST',
@@ -1000,7 +1004,7 @@ async function handleTransferProductSubmit(e) {
         const updatedProduct = {
             ...product,
             packagingNumber: product.packagingNumber - 1,
-            packageType: product.packageType || 'Frasco plástico' // Inclui packageType
+            packaging: product.packaging || 'Frasco plástico'
         };
         const index = state.stockData.findIndex(p => p.id === productId);
         const updateResponse = await fetch(`${CONFIG.API_BASE_URL}/api/stock/${productId}?index=${index}`, {
@@ -1055,7 +1059,7 @@ async function exhaustProduct(productId) {
         if (!product.unit) missingFields.push('unit');
         if (!product.location) missingFields.push('location');
         if (!product.status) missingFields.push('status');
-		if (!product.packageType) missingFields.push('packageType'); // Adicionada validação
+		if (!product.packaging) missingFields.push('packaging'); // Adicionada validação
         if (missingFields.length > 0) {
             console.error('[exhaustProduct] Campos obrigatórios ausentes:', missingFields, 'Produto:', product);
             throw new Error(`Produto com dados incompletos. Campos ausentes: ${missingFields.join(', ')}.`);
@@ -1074,7 +1078,7 @@ async function exhaustProduct(productId) {
             minimumStock: product.minimumStock || 0,
             invoice: product.invoice || '',
             expirationDate: product.expirationDate || '',
-            packageType: product.packageType || 'Frasco plástico' // Inclui packageType com padrão
+            packaging: product.packaging || 'Frasco plástico' // Inclui packageType com padrão
         };
         const index = state.stockData.findIndex(p => p.id === productId);
         if (index === -1) {

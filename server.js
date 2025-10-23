@@ -65,7 +65,7 @@ app.get('/api/stock', async (req, res) => {
         console.log('[API] Carregando dados de estoque...');
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Estoque!A2:N'
+            range: 'Estoque!A2:M'
         });
 
         const values = response.data.values || [];
@@ -80,14 +80,13 @@ app.get('/api/stock', async (req, res) => {
         batch: row[3] || `Lote_${index + 2}`,
         quantity: parseFloat(quantityStr) || 0,
         unit: row[5] || 'un',
-        packaging: row[6] || '',
+        packaging: row[6] || '', // Usado para tipo de embalagem
         packagingNumber: parseInt(row[7]) || 1,
         minimumStock: parseFloat(minimumStockStr) || 0,
         invoice: row[9] || '',
         expirationDate: normalizeDate(row[10]),
         location: location,
-        status: row[12] || 'disponivel',
-        packageType: row[13] || ''
+        status: row[12] || 'disponivel'
     };
 		}).filter(item => item.product && item.batch);
 
@@ -165,19 +164,18 @@ app.post('/api/stock', async (req, res) => {
             product.batch,
             product.quantity.toString(),
             product.unit,
-            product.packaging || '',
+            product.packaging,
             product.packagingNumber.toString(),
             product.minimumStock.toString(),
             product.invoice || '',
             product.expirationDate || '',
             product.location,
-            product.status,
-            product.packageType || '' // Novo campo
+            product.status
         ];
 
         const response = await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Estoque!A:N',
+            range: 'Estoque!A:M',
             valueInputOption: 'RAW',
             resource: { values: [values] }
         });
@@ -212,7 +210,7 @@ app.put('/api/stock/:id', async (req, res) => {
         const index = parseInt(req.query.index);
         const product = req.body;
         console.log(`[API] Atualizando produto ID: ${id}, Index: ${index}, Dados:`, product);
-        if (!product.product || !product.batch || product.quantity === undefined || product.quantity === null || !product.unit || !product.location || !product.status || !product.packageType) {
+        if (!product.product || !product.batch || product.quantity === undefined || product.quantity === null || !product.unit || !product.location || !product.status || !product.packaging) {
             console.warn('[API] Campos obrigatórios ausentes:', product);
             return res.status(400).json({ success: false, error: 'Campos obrigatórios ausentes' });
         }
@@ -230,7 +228,7 @@ app.put('/api/stock/:id', async (req, res) => {
         }
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Estoque!A2:N' // Inclui coluna N para packageType
+            range: 'Estoque!A2:M' // Inclui coluna N para packageType
         });
         const values = response.data.values || [];
         if (isNaN(index) || index < 0 || index >= values.length) {
@@ -250,8 +248,7 @@ app.put('/api/stock/:id', async (req, res) => {
             product.invoice || '',
             product.expirationDate || '',
             product.location || 'loc_default',
-            product.status,
-            product.packageType || '' // Garante que packageType seja incluído, mesmo se vazio
+            product.status
         ];
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
