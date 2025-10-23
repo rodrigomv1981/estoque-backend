@@ -792,7 +792,7 @@ async function handleProductSubmit(e) {
             invoice: document.getElementById('invoice').value,
             expirationDate: document.getElementById('expirationDate').value,
             location: document.getElementById('location').value,
-            status: document.getElementById('status').value
+            status: document.getElementById('status').value,
 		    packageType: document.getElementById('packageType').value // Novo campo
         };
         let response;
@@ -964,7 +964,7 @@ async function handleTransferProductSubmit(e) {
             const updatedExistingProduct = {
                 ...existingProduct,
                 packagingNumber: existingProduct.packagingNumber + 1,
-                quantity: existingProduct.quantity + product.quantity
+                quantity: existingProduct.quantity + product.quantity,
 		        packageType: product.packageType // Manter o mesmo tipo de embalagem
             };
             const existingIndex = state.stockData.findIndex(p => p.id === existingProduct.id);
@@ -982,7 +982,7 @@ async function handleTransferProductSubmit(e) {
                 ...product,
                 id: await generateFrontendSequentialId('prod_'),
                 packagingNumber: 1,
-                location: newLocationId
+                location: newLocationId,
 		        packageType: product.packageType // Incluir tipo de embalagem
 
             };

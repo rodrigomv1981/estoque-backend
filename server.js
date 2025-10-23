@@ -86,8 +86,8 @@ app.get('/api/stock', async (req, res) => {
         invoice: row[9] || '',
         expirationDate: normalizeDate(row[10]),
         location: location,
-        status: row[12] || 'disponivel'
-       packageType: row[13] || '' // Novo campo
+        status: row[12] || 'disponivel',
+        packageType: row[13] || ''
     };
 		}).filter(item => item.product && item.batch);
 
@@ -171,7 +171,7 @@ app.post('/api/stock', async (req, res) => {
             product.invoice || '',
             product.expirationDate || '',
             product.location,
-            product.status
+            product.status,
             product.packageType // Novo campo
         ];
 
@@ -260,7 +260,7 @@ app.put('/api/stock/:id', async (req, res) => {
             product.invoice || '',
             product.expirationDate || '',
             product.location || 'loc_default', // Alteração: Garantir localização padrão
-            product.status
+            product.status,
 			product.packageType // Novo campo
         ];
 
