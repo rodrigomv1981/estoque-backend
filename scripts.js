@@ -561,20 +561,19 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         document.getElementById('location').value = product.location || '';
         document.getElementById('status').value = product.status || 'disponivel';
     } else {
-        console.log('[openProductModal] Resetando formulário para novo produto');
         form.reset();
         document.getElementById('productId').value = '';
-        document.getElementById('packagingNumber').value = '1';
-        document.getElementById('minimumStock').value = '0';
-        document.getElementById('status').value = 'disponivel';
-        document.getElementById('packaging').value = 'Frasco plástico';
-		document.body.style.overflow = 'hidden';
-		
-		modal.classList.add('active');
-		modal.style.display = 'flex';
-		modal.style.zIndex = '9999';
-		console.log('[openProductModal] Modal aberto');
+        // ... mais campos ...
+    }  // ✅ fecha aqui o else
+    
+    // ✅ código de abertura FORA do if/else
+    document.body.style.overflow = 'hidden';
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+    modal.style.zIndex = '9999';
+    console.log('[openProductModal] Modal aberto');
 }
+
 
 function closeProductModal() {
     const modal = document.getElementById('productModal');
