@@ -192,6 +192,8 @@ body {
     gap: 0.5rem;
     transition: var(--transition);
     box-shadow: var(--shadow-sm);
+    -webkit-appearance: none; /* Evita estilização nativa no Android */
+    opacity: 1; /* Garante opacidade total */
 }
 
 .btn-primary:hover {
@@ -496,7 +498,7 @@ body {
     flex: 1;
     padding: 0.5rem;
     border: 1px solid var(--border-color);
-    background: white;
+    background: white; /* Fundo sólido */
     border-radius: var(--radius-sm);
     font-size: 0.85rem;
     font-weight: 500;
@@ -507,6 +509,8 @@ body {
     justify-content: center;
     gap: 0.25rem;
     min-width: 100px;
+    -webkit-appearance: none; /* Evita estilização nativa no Android */
+    opacity: 1; /* Garante opacidade total */
 }
 
 .btn-action:hover {
@@ -516,6 +520,7 @@ body {
 .btn-action.edit:hover {
     border-color: var(--primary);
     color: var(--primary);
+    background: var(--bg-tertiary); /* Fundo ao passar o mouse */
 }
 
 .btn-action.delete:hover {
@@ -714,41 +719,44 @@ body {
     bottom: 0;
     width: 100%;
     height: 100%;
-    z-index: 9999;
+    z-index: 10000; /* Aumentado para evitar conflitos */
+    -webkit-backface-visibility: hidden; /* Melhora renderização em Webkit */
+    backface-visibility: hidden;
 }
 
-
 .modal.active {
-    display: flex !important; /* Força a visibilidade */
+    display: flex !important;
     align-items: center;
     justify-content: center;
-    z-index: 9999;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.5); /* Fundo do modal para maior contraste */
+    -webkit-backdrop-filter: blur(4px); /* Suporte para Android */
+    backdrop-filter: blur(4px);
 }
 
 .modal-overlay {
-    position: absolute; /* Usar absolute para garantir que ele cubra o modal-content, que está em z-index 2 */
+    position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: transparent; /* Removido fundo para evitar dupla opacidade */
     z-index: 1;
 }
 
 .modal-content {
     position: relative;
-    background: white;
+    background: white; /* Fundo sólido */
     border-radius: var(--radius-xl);
-    width: 90%;
+    width: 95%; /* Ajustado para melhor responsividade */
     max-width: 500px;
     max-height: 85vh;
     overflow-y: auto;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); /* Sombra mais forte */
     z-index: 2;
-    /* Adicionado para garantir que o modal-content seja visível acima do overlay */
-    transform: translateZ(0); 
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0); /* Suporte para Android */
 }
-
 
 @keyframes slideUp {
     from {
@@ -916,15 +924,17 @@ body {
         grid-template-columns: 1fr;
     }
 
-    .modal-content {
+   .modal-content {
         width: 95%;
         max-height: 85vh;
+        -webkit-overflow-scrolling: touch; /* Melhora rolagem no Android */
     }
 
     .btn-primary,
     .btn-secondary {
         padding: 0.65rem 1.25rem;
         font-size: 0.9rem;
+        -webkit-tap-highlight-color: transparent; /* Remove destaque de toque no Android */
     }
 
     .pagination {
@@ -959,18 +969,21 @@ body {
 	        padding: 1rem;
 	    }
 	
-	    .modal-header,
-	    .modal-form {
-	        padding: 1rem;
-	    }
+    .modal-header,
+    .modal-form {
+        padding: 0.75rem; /* Reduzido para melhor aproveitamento */
+    }
 	
-	    .form-actions {
-	        flex-direction: column-reverse;
-	    }
+    .form-actions {
+        flex-direction: column-reverse;
+        gap: 0.75rem;
+    }
 	
-	    .form-actions button {
-	        width: 100%;
-	    }
+    .form-actions button {
+        width: 100%;
+        padding: 0.75rem; /* Consistência com outros botões */
+        -webkit-tap-highlight-color: transparent; /* Remove destaque de toque */
+    }
 		
 		.section-actions {
 		    display: flex;
