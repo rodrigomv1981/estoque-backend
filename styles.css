@@ -796,6 +796,7 @@ body {
 
 .form-group {
     margin-bottom: 1.25rem;
+
 }
 
 .form-group label {
@@ -937,6 +938,7 @@ body {
     }
 
     .form-row {
+        /* Forçando o layout de duas colunas com grid, revertendo a quebra para coluna única */
         grid-template-columns: 1fr 1fr;
         gap: 0.75rem;
     }
@@ -968,6 +970,7 @@ body {
     }
 
     .form-row {
+        /* Forçando o layout de duas colunas com grid, revertendo a quebra para coluna única */
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 0.75rem;
