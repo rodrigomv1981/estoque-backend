@@ -726,7 +726,7 @@ body {
 }
 
 .modal-overlay {
-    position: fixed;
+    position: absolute; /* Usar absolute para garantir que ele cubra o modal-content, que está em z-index 2 */
     top: 0;
     left: 0;
     width: 100%;
@@ -745,6 +745,8 @@ body {
     overflow-y: auto;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
     z-index: 2;
+    /* Adicionado para garantir que o modal-content seja visível acima do overlay */
+    transform: translateZ(0); 
 }
 
 
@@ -935,72 +937,44 @@ body {
     }
 }
 
-@media (max-width: 480px) {
-    .section-header {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .btn-primary {
-        width: 100%;
-    }
-
-    .filters-container {
-        flex-direction: column;
-    }
-
-    .filter-select {
-        width: 100%;
-    }
-
-    .product-card {
-        padding: 1rem;
-    }
-
-    .modal-header,
-    .modal-form {
-        padding: 1rem;
-    }
-
-    .form-actions {
-        flex-direction: column-reverse;
-    }
-
-    .form-actions button {
-        width: 100%;
-    }
+	@media (max-width: 480px) {
+	    .section-header {
+	        flex-direction: column;
+	        align-items: stretch;
+	    }
 	
-	.section-actions {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-@media (max-width: 480px) {
-    .section-actions {
-        width: 100%;
-        justify-content: stretch;
-    }
-    .section-actions .btn-primary {
-        flex: 1;
-    }
-
-
-    /* Ajuste para manter botões horizontais em telas pequenas */
-    .product-actions.horizontal {
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        justify-content: flex-start;
-    }
-
-    .product-actions.horizontal .btn-action {
-        flex: 0 0 auto;
-        min-width: 80px;
-        padding: 0.4rem 0.8rem;
-        font-size: 0.8rem;
-    }
-}
+	    .btn-primary {
+	        width: 100%;
+	    }
+	
+	    .filters-container {
+	        flex-direction: column;
+	    }
+	
+	    .filter-select {
+	        width: 100%;
+	    }
+	
+	    .product-card {
+	        padding: 1rem;
+	    }
+	
+	    .modal-header,
+	    .modal-form {
+	        padding: 1rem;
+	    }
+	
+	    .form-actions {
+	        flex-direction: column-reverse;
+	    }
+	
+	    .form-actions button {
+	        width: 100%;
+	    }
+		
+		.section-actions {
+		    display: flex;
+		   }
 
 /* Print Styles */
 @media print {

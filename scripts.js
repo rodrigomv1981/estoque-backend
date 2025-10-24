@@ -569,8 +569,7 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
     // ✅ código de abertura FORA do if/else
     document.body.style.overflow = 'hidden';
     modal.classList.add('active');
-    modal.style.display = 'flex';
-    modal.style.zIndex = '9999';
+
     console.log('[openProductModal] Modal aberto');
 }
 
