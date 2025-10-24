@@ -569,22 +569,17 @@ function openProductModal(title = 'Adicionar Produto', product = null) {
         document.getElementById('status').value = 'disponivel';
         document.getElementById('packaging').value = 'Frasco plástico';
 		document.body.style.overflow = 'hidden';
-    
-    // Adiciona a classe active para exibir o modal
+		
 		modal.classList.add('active');
-    
-    // Força o modal a ficar visível (importante para Android)
 		modal.style.display = 'flex';
-		modal.style.position = 'fixed';
 		modal.style.zIndex = '9999';
-    
-		console.log('[openProductModal] Modal aberto com sucesso');
+		console.log('[openProductModal] Modal aberto');
+}
 
 function closeProductModal() {
     const modal = document.getElementById('productModal');
     if (modal) {
         modal.classList.remove('active');
-        // Restaura o scroll do body
         document.body.style.overflow = '';
     }
 }
