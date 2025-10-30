@@ -544,34 +544,28 @@ body {
     color: var(--success);
 }
 
+/* Ajuste para botões horizontais em todas as resoluções */
 .product-actions.horizontal {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 0.5rem;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     margin-top: 1rem;
     padding: 0.5rem;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    box-sizing: border-box;
 }
 
 .product-actions.horizontal .btn-action {
-    flex: 1;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.85rem;
+    flex: 0 0 auto;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 0.25rem;
-    border-radius: var(--radius-sm);
-    min-width: 80px;
-    max-width: 120px;
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-    text-align: center;
+    border-radius: 4px;
+    min-width: 90px; /* Ajustado para evitar botões muito pequenos */
 }
+
 
 /* Locations Grid */
 .locations-grid {
@@ -725,41 +719,40 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 10010;
-    background: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    animation: fadeIn 0.2s ease-in-out;
 }
 
 .modal.active {
-    display: flex !important;
+    display: flex !important; /* Força a visibilidade */
     align-items: center;
     justify-content: center;
-    z-index: 10010;
+    z-index: 1000;
 }
 
 .modal-overlay {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    background: transparent;
-    z-index: 1;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 999;
 }
 
 .modal-content {
     position: relative;
-    background: #ffffff;
+    background: white;
     border-radius: var(--radius-xl);
-    width: 95%;
+    width: 90%;
     max-width: 500px;
     max-height: 90vh;
     overflow-y: auto;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    z-index: 2;
-    -webkit-overflow-scrolling: touch;
-    -webkit-transform: translateZ(0);
+    box-shadow: var(--shadow-xl);
+    animation: slideUp 0.3s ease-in-out;
+    z-index: 1001;
+    padding: 1rem; /* Garante espaço interno */
 }
 
 @keyframes slideUp {
@@ -788,10 +781,7 @@ body {
 }
 
 .modal-form {
-    padding: 1rem;
-    background: #ffffff;
-    box-sizing: border-box;
-    width: 100%;
+    padding: 1.5rem;
 }
 
 .form-group {
@@ -813,21 +803,15 @@ body {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     font-size: 0.95rem;
-    transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-    background: #ffffff;
-    -webkit-appearance: none;
-    opacity: 1;
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-    color: var(--text-primary);
+    transition: var(--transition);
+    background: white;
 }
 
 .form-group input:focus,
 .form-group select:focus {
     outline: none;
-    border-color: #6366f1;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-    background: #ffffff;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .form-row {
@@ -840,24 +824,14 @@ body {
 
 .form-actions {
     display: flex;
-    flex-wrap: nowrap;
-    gap: 0.75rem;
+    gap: 1rem;
     margin-top: 1.5rem;
     padding-top: 1.5rem;
     border-top: 1px solid var(--border-color);
-    justify-content: space-between;
-    box-sizing: border-box;
 }
 
 .form-actions button {
     flex: 1;
-    min-width: 100px;
-    max-width: 150px;
-    padding: 0.75rem;
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-    -webkit-appearance: none;
-    opacity: 1;
 }
 
 /* Loading Overlay */
@@ -928,101 +902,115 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-    .modal-content {
-        width: 95%;
-        max-height: 90vh;
-        -webkit-overflow-scrolling: touch;
-        background: #ffffff;
-        -webkit-transform: translateZ(0);
+    .header-title {
+        font-size: 1.25rem;
+    }
+
+    .section-title {
+        font-size: 1.25rem;
+    }
+
+    .products-grid,
+    .total-stock-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .locations-grid {
+        grid-template-columns: 1fr;
     }
 
     .form-row {
         grid-template-columns: 1fr;
-        gap: 0.5rem;
     }
 
-    .form-group input,
-    .form-group select {
-        font-size: 0.9rem;
-        padding: 0.65rem;
+    .modal-content {
+        width: 95%;
+        max-height: 85vh;
     }
 
     .btn-primary,
     .btn-secondary {
         padding: 0.65rem 1.25rem;
         font-size: 0.9rem;
-        -webkit-tap-highlight-color: transparent;
-        -webkit-appearance: none;
-        opacity: 1;
     }
 
-    .btn-action {
+    .pagination {
+        gap: 0.5rem;
+    }
+
+    .pagination .btn-secondary {
         padding: 0.5rem 1rem;
-        min-width: 90px;
-    }
-}
-
-@media (max-width: 600px) {
-    .modal-content {
-        width: 98%;
-    }
-
-    .form-row {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .form-group input,
-    .form-group select {
-        font-size: 0.85rem;
-        padding: 0.6rem;
-    }
-
-    .form-actions {
-        flex-wrap: nowrap;
-        gap: 0.5rem;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    .form-actions button {
-        min-width: 90px;
-        max-width: 130px;
         font-size: 0.85rem;
     }
 }
 
 @media (max-width: 480px) {
+    .section-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .btn-primary {
+        width: 100%;
+    }
+
+    .filters-container {
+        flex-direction: column;
+    }
+
+    .filter-select {
+        width: 100%;
+    }
+
+    .product-card {
+        padding: 1rem;
+    }
+
     .modal-header,
     .modal-form {
-        padding: 0.75rem;
+        padding: 1rem;
     }
 
     .form-actions {
         flex-direction: column-reverse;
-        gap: 0.75rem;
-        overflow-x: visible;
     }
 
     .form-actions button {
         width: 100%;
-        max-width: none;
-        padding: 0.75rem;
-        font-size: 0.9rem;
+    }
+	
+	.section-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+    .section-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+    .section-actions .btn-primary {
+        flex: 1;
     }
 
-    .btn-action {
-        font-size: 0.8rem;
+
+    /* Ajuste para manter botões horizontais em telas pequenas */
+    .product-actions.horizontal {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: flex-start;
+    }
+
+    .product-actions.horizontal .btn-action {
+        flex: 0 0 auto;
         min-width: 80px;
-    }
-
-    .form-group input,
-    .form-group select {
-        font-size: 0.85rem;
-        padding: 0.6rem;
+        padding: 0.4rem 0.8rem;
+        font-size: 0.8rem;
     }
 }
+
 
 /* Print Styles */
 @media print {
@@ -1082,3 +1070,24 @@ body {
     color: var(--text-secondary);
     font-weight: 500;
 }
+
+/* Ajuste responsivo */
+@media (max-width: 480px) {
+    .total-stock-header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .total-stock-header h4,
+    .total-stock-header p {
+        font-size: 0.85rem; /* Menor em telas pequenas */
+    }
+}
+
+.product-group-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
